@@ -17,10 +17,27 @@ function getISTNow(){
 }
 function getGameStatus(game){
   const now = getISTNow();
+
+  // today's date in IST
+  const today = now.date;
+
   if (now.date < game.game_date) return 'upcoming';
   if (now.date > game.game_date) return game.result ? 'completed' : 'locked';
+
   const mins = now.hour * 60 + now.minute;
-  return mins < 18 * 60 ? 'open' : (game.result ? 'completed' : 'locked');
+
+  // ✅ TODAY override → 6:30 PM
+  if (game.game_date === today) {
+    return mins < (18 * 60 + 30)
+      ? 'open'
+      : (game.result ? 'completed' : 'locked');
+  }
+
+  // ✅ default → 6:00 PM
+  return mins < 18 * 60
+    ? 'open'
+    : (game.result ? 'completed' : 'locked');
+}
 }
 function labelStatus(s){ return ({upcoming:'Upcoming', open:'Open now', locked:'Locked', completed:'Completed'})[s] || s; }
 function labelResult(r){ return ({white_win:'White win', draw:'Draw', black_win:'Black win'})[r] || '—'; }
