@@ -26,7 +26,7 @@ function getGameStatus(game){
 
   // Today only: lock at 6:30 PM IST
   if (game.game_date === now.date) {
-    return mins < (18 * 60 + 30) ? 'open' : (game.result ? 'completed' : 'locked');
+    return mins < (19 * 60 + 15) ? 'open' : (game.result ? 'completed' : 'locked');
   }
 
   // All other days: default 6:00 PM IST logic
