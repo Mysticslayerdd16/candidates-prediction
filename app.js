@@ -15,30 +15,24 @@ function getISTNow(){
   }).formatToParts(new Date()).reduce((a,p) => { a[p.type] = p.value; return a; }, {});
   return { date:`${parts.year}-${parts.month}-${parts.day}`, hour:Number(parts.hour), minute:Number(parts.minute) };
 }
+
 function getGameStatus(game){
   const now = getISTNow();
-
-  // today's date in IST
-  const today = now.date;
 
   if (now.date < game.game_date) return 'upcoming';
   if (now.date > game.game_date) return game.result ? 'completed' : 'locked';
 
   const mins = now.hour * 60 + now.minute;
 
-  // ✅ TODAY override → 6:30 PM
-  if (game.game_date === today) {
-    return mins < (18 * 60 + 30)
-      ? 'open'
-      : (game.result ? 'completed' : 'locked');
+  // Today only: lock at 6:30 PM IST
+  if (game.game_date === now.date) {
+    return mins < (18 * 60 + 30) ? 'open' : (game.result ? 'completed' : 'locked');
   }
 
-  // ✅ default → 6:00 PM
-  return mins < 18 * 60
-    ? 'open'
-    : (game.result ? 'completed' : 'locked');
+  // All other days: default 6:00 PM IST logic
+  return mins < 18 * 60 ? 'open' : (game.result ? 'completed' : 'locked');
 }
-}
+
 function labelStatus(s){ return ({upcoming:'Upcoming', open:'Open now', locked:'Locked', completed:'Completed'})[s] || s; }
 function labelResult(r){ return ({white_win:'White win', draw:'Draw', black_win:'Black win'})[r] || '—'; }
 function predictionMap(){ const m = new Map(); app.predictions.forEach(p => m.set(p.game_id, p)); return m; }
@@ -192,8 +186,12 @@ function renderLeaderboard(){
 
 function renderAdmin(){
   const visible = !!app.profile.is_admin;
+  qs('admin-tab-btn').classList.toggle('hidden', !visible);
   if (!visible) return;
-  const tbody = qs('admin-games-body'); tbody.innerHTML = '';
+
+  const tbody = qs('admin-games-body');
+  tbody.innerHTML = '';
+
   app.games.forEach(game => tbody.insertAdjacentHTML('beforeend', `
     <tr>
       <td>${game.round_no}</td>
@@ -209,6 +207,7 @@ function renderAdmin(){
       </td>
     </tr>
   `));
+
   tbody.querySelectorAll('select').forEach(sel => sel.addEventListener('change', async () => {
     const id = Number(sel.dataset.id), result = sel.value || null;
     const { error } = await app.supabase.from('games').update({ result }).eq('id', id);
@@ -220,7 +219,6 @@ function renderAdmin(){
 async function refresh(){ await loadData(); renderTop(); renderFixtures(); renderLeaderboard(); renderAdmin(); }
 
 function activateTab(tab){
-  if (tab === 'admin' && (!app.profile || !app.profile.is_admin)) tab = 'fixtures';
   document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.toggle('active', btn.dataset.tab === tab));
   document.querySelectorAll('.tab-panel').forEach(panel => panel.classList.toggle('hidden', panel.dataset.tabPanel !== tab));
 }
