@@ -6,11 +6,14 @@ const app = {
   profile: null,
   games: [],
   predictions: [],
-  leaderboard: []
+  leaderboard: [],
+  allProfiles: [],
+  allPredictions: []
 };
 
 let currentTournament = 'open';
 let currentStandingsTournament = 'open';
+let currentRoundPredictionsTournament = 'open';
 
 const qs = id => document.getElementById(id);
 const show = el => el && el.classList.remove('hidden');
@@ -54,16 +57,13 @@ function getGameStatus(game) {
   if (now.date > game.game_date) return game.result ? 'completed' : 'locked';
 
   const mins = now.hour * 60 + now.minute;
-
   return mins < 18 * 60 ? 'open' : (game.result ? 'completed' : 'locked');
 }
 
 function getCountdownText(game) {
   const now = getISTNow();
 
-  if (now.date < game.game_date) {
-    return 'Opens on game day';
-  }
+  if (now.date < game.game_date) return 'Opens on game day';
 
   const nowMinutes = now.hour * 60 + now.minute;
   const closeMinutes = 17 * 60 + 59;
@@ -94,6 +94,13 @@ function labelResult(r) {
     draw: 'Draw',
     black_win: 'Black win'
   })[r] || '—';
+}
+
+function shortResultLabel(r, game) {
+  if (r === 'white_win') return `${game.white_player} win`;
+  if (r === 'black_win') return `${game.black_player} win`;
+  if (r === 'draw') return 'Draw';
+  return '—';
 }
 
 function predictionMap() {
@@ -209,7 +216,9 @@ async function loadData() {
   app.profile = profile;
   app.games = games || [];
   app.predictions = predictions || [];
-  app.leaderboard = buildLeaderboard(profiles || [], allPreds || [], app.games);
+  app.allProfiles = profiles || [];
+  app.allPredictions = allPreds || [];
+  app.leaderboard = buildLeaderboard(app.allProfiles, app.allPredictions, app.games);
 }
 
 function buildLeaderboard(profiles, allPreds, games) {
@@ -249,12 +258,8 @@ function buildStandings(games, tournament) {
       const white = game.white_player;
       const black = game.black_player;
 
-      if (!table.has(white)) {
-        table.set(white, { player: white, played: 0, wins: 0, draws: 0, losses: 0, points: 0 });
-      }
-      if (!table.has(black)) {
-        table.set(black, { player: black, played: 0, wins: 0, draws: 0, losses: 0, points: 0 });
-      }
+      if (!table.has(white)) table.set(white, { player: white, played: 0, wins: 0, draws: 0, losses: 0, points: 0 });
+      if (!table.has(black)) table.set(black, { player: black, played: 0, wins: 0, draws: 0, losses: 0, points: 0 });
 
       const w = table.get(white);
       const b = table.get(black);
@@ -281,6 +286,14 @@ function buildStandings(games, tournament) {
   return Array.from(table.values()).sort(
     (a, b) => b.points - a.points || b.wins - a.wins || a.player.localeCompare(b.player)
   );
+}
+
+function getRoundsForTournament(tournament) {
+  return [...new Set(
+    app.games
+      .filter(g => g.tournament === tournament)
+      .map(g => g.round_no)
+  )].sort((a, b) => a - b);
 }
 
 function renderTop() {
@@ -411,6 +424,102 @@ function renderStandings() {
   });
 }
 
+function populateRoundSelect() {
+  const select = qs('round-select');
+  if (!select) return;
+
+  const rounds = getRoundsForTournament(currentRoundPredictionsTournament);
+  const currentValue = select.value;
+
+  select.innerHTML = rounds.map(r => `<option value="${r}">Round ${r}</option>`).join('');
+
+  if (rounds.includes(Number(currentValue))) {
+    select.value = currentValue;
+  } else if (rounds.length) {
+    select.value = String(rounds[0]);
+  }
+}
+
+function renderRoundPredictions() {
+  const messageEl = qs('round-predictions-message');
+  const headEl = qs('round-predictions-head');
+  const bodyEl = qs('round-predictions-body');
+  const select = qs('round-select');
+
+  if (!messageEl || !headEl || !bodyEl || !select) return;
+
+  populateRoundSelect();
+
+  const selectedRound = Number(select.value);
+  const roundGames = app.games
+    .filter(g => g.tournament === currentRoundPredictionsTournament && g.round_no === selectedRound)
+    .sort((a, b) => a.id - b.id);
+
+  headEl.innerHTML = '';
+  bodyEl.innerHTML = '';
+  messageEl.textContent = '';
+  hide(messageEl);
+
+  if (!roundGames.length) {
+    messageEl.textContent = 'No games found for this tournament/round.';
+    show(messageEl);
+    return;
+  }
+
+  const roundCompleted = roundGames.every(g => !!g.result);
+
+  if (!roundCompleted) {
+    messageEl.textContent = 'This round is not complete yet. Predictions will be visible after all results for the round are updated.';
+    show(messageEl);
+    return;
+  }
+
+  const headerCells = roundGames.map((game, idx) =>
+    `<th>G${idx + 1}<br><span class="small">${esc(game.white_player)} vs ${esc(game.black_player)}</span></th>`
+  ).join('');
+
+  headEl.innerHTML = `
+    <tr>
+      <th>User</th>
+      ${headerCells}
+      <th>Round score</th>
+    </tr>
+  `;
+
+  app.allProfiles
+    .slice()
+    .sort((a, b) => a.display_name.localeCompare(b.display_name))
+    .forEach(profile => {
+      let roundCorrect = 0;
+
+      const cells = roundGames.map(game => {
+        const pred = app.allPredictions.find(p => p.user_id === profile.id && p.game_id === game.id);
+
+        if (!pred) {
+          return `<td><span class="muted">No pick</span><br><span class="small">Actual: ${esc(shortResultLabel(game.result, game))}</span></td>`;
+        }
+
+        const correct = pred.prediction === game.result;
+        if (correct) roundCorrect += 1;
+
+        return `
+          <td>
+            <div>${esc(labelResult(pred.prediction))} ${correct ? '✅' : '❌'}</div>
+            <div class="small">Actual: ${esc(shortResultLabel(game.result, game))}</div>
+          </td>
+        `;
+      }).join('');
+
+      bodyEl.insertAdjacentHTML('beforeend', `
+        <tr>
+          <td>${esc(profile.display_name)}</td>
+          ${cells}
+          <td>${roundCorrect}/${roundGames.length}</td>
+        </tr>
+      `);
+    });
+}
+
 function renderAdmin() {
   const visible = !!app.profile.is_admin;
   qs('admin-tab-btn')?.classList.toggle('hidden', !visible);
@@ -462,6 +571,7 @@ async function refresh() {
   renderFixtures();
   renderLeaderboard();
   renderStandings();
+  renderRoundPredictions();
   renderAdmin();
 }
 
@@ -527,6 +637,20 @@ document.addEventListener('DOMContentLoaded', async () => {
   qs('standings-women-btn')?.addEventListener('click', () => {
     currentStandingsTournament = 'women';
     renderStandings();
+  });
+
+  qs('round-open-btn')?.addEventListener('click', () => {
+    currentRoundPredictionsTournament = 'open';
+    renderRoundPredictions();
+  });
+
+  qs('round-women-btn')?.addEventListener('click', () => {
+    currentRoundPredictionsTournament = 'women';
+    renderRoundPredictions();
+  });
+
+  qs('round-select')?.addEventListener('change', () => {
+    renderRoundPredictions();
   });
 
   activateTab('fixtures');
