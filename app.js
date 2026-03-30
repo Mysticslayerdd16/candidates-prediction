@@ -1,22 +1,53 @@
 const { createClient } = supabase;
 const cfg = window.APP_CONFIG || {};
-const app = { supabase:null, user:null, profile:null, games:[], predictions:[], leaderboard:[] };
+const app = {
+  supabase: null,
+  user: null,
+  profile: null,
+  games: [],
+  predictions: [],
+  leaderboard: []
+};
+
+let currentTournament = 'open';
+let currentStandingsTournament = 'open';
 
 const qs = id => document.getElementById(id);
-const show = el => el.classList.remove('hidden');
-const hide = el => el.classList.add('hidden');
+const show = el => el && el.classList.remove('hidden');
+const hide = el => el && el.classList.add('hidden');
 
-function esc(v=''){ return String(v).replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m])); }
-
-function getISTNow(){
-  const parts = new Intl.DateTimeFormat('en-CA', {
-    timeZone:'Asia/Kolkata', year:'numeric', month:'2-digit', day:'2-digit',
-    hour:'2-digit', minute:'2-digit', hour12:false
-  }).formatToParts(new Date()).reduce((a,p) => { a[p.type] = p.value; return a; }, {});
-  return { date:`${parts.year}-${parts.month}-${parts.day}`, hour:Number(parts.hour), minute:Number(parts.minute) };
+function esc(v = '') {
+  return String(v).replace(/[&<>"']/g, m => ({
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    '"': '&quot;',
+    "'": '&#39;'
+  }[m]));
 }
 
-function getGameStatus(game){
+function getISTNow() {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Kolkata',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false
+  }).formatToParts(new Date()).reduce((a, p) => {
+    a[p.type] = p.value;
+    return a;
+  }, {});
+
+  return {
+    date: `${parts.year}-${parts.month}-${parts.day}`,
+    hour: Number(parts.hour),
+    minute: Number(parts.minute)
+  };
+}
+
+function getGameStatus(game) {
   const now = getISTNow();
 
   if (now.date < game.game_date) return 'upcoming';
@@ -24,223 +55,484 @@ function getGameStatus(game){
 
   const mins = now.hour * 60 + now.minute;
 
-  // Today only: lock at 6:30 PM IST
-  if (game.game_date === now.date) {
-    return mins < (19 * 60 + 15) ? 'open' : (game.result ? 'completed' : 'locked');
-  }
-
-  // All other days: default 6:00 PM IST logic
   return mins < 18 * 60 ? 'open' : (game.result ? 'completed' : 'locked');
 }
 
-function labelStatus(s){ return ({upcoming:'Upcoming', open:'Open now', locked:'Locked', completed:'Completed'})[s] || s; }
-function labelResult(r){ return ({white_win:'White win', draw:'Draw', black_win:'Black win'})[r] || '—'; }
-function predictionMap(){ const m = new Map(); app.predictions.forEach(p => m.set(p.game_id, p)); return m; }
+function getCountdownText(game) {
+  const now = getISTNow();
 
-async function ensureProfile(session){
+  if (now.date < game.game_date) {
+    return 'Opens on game day';
+  }
+
+  const nowMinutes = now.hour * 60 + now.minute;
+  const closeMinutes = 17 * 60 + 59;
+
+  if (now.date > game.game_date || nowMinutes > closeMinutes) {
+    return game.result ? 'Result updated' : 'Locked';
+  }
+
+  const remaining = closeMinutes - nowMinutes;
+  const hours = Math.floor(remaining / 60);
+  const minutes = remaining % 60;
+
+  return `Closes in ${String(hours).padStart(2, '0')}h ${String(minutes).padStart(2, '0')}m`;
+}
+
+function labelStatus(s) {
+  return ({
+    upcoming: 'Upcoming',
+    open: 'Open now',
+    locked: 'Locked',
+    completed: 'Completed'
+  })[s] || s;
+}
+
+function labelResult(r) {
+  return ({
+    white_win: 'White win',
+    draw: 'Draw',
+    black_win: 'Black win'
+  })[r] || '—';
+}
+
+function predictionMap() {
+  const m = new Map();
+  app.predictions.forEach(p => m.set(p.game_id, p));
+  return m;
+}
+
+async function ensureProfile(session) {
   const user = session?.user;
   if (!user) return null;
-  const { data: existing } = await app.supabase.from('profiles').select('*').eq('id', user.id).maybeSingle();
+
+  const { data: existing, error: existingError } = await app.supabase
+    .from('profiles')
+    .select('*')
+    .eq('id', user.id)
+    .maybeSingle();
+
+  if (existingError) throw existingError;
   if (existing) return existing;
+
   const displayName = (user.user_metadata?.display_name || '').trim();
   if (!displayName) throw new Error('Display name is missing.');
-  const { data, error } = await app.supabase.from('profiles').insert({
-    id: user.id,
-    email: user.email,
-    display_name: displayName
-  }).select().single();
+
+  const { data, error } = await app.supabase
+    .from('profiles')
+    .insert({
+      id: user.id,
+      email: user.email,
+      display_name: displayName
+    })
+    .select()
+    .single();
+
   if (error) throw error;
   return data;
 }
 
-function authMessage(msg, type='ok'){
+function authMessage(msg, type = 'ok') {
   const el = qs('auth-message');
+  if (!el) return;
   el.className = 'notice' + (type === 'error' ? ' error' : '');
   el.textContent = msg;
   show(el);
 }
 
-async function signUp(){
-  const email = qs('signup-email').value.trim();
-  const password = qs('signup-password').value.trim();
-  const displayName = qs('signup-display-name').value.trim();
-  if (!email || !password || !displayName) return authMessage('Please fill all sign-up fields.', 'error');
+async function signUp() {
+  const email = qs('signup-email')?.value.trim();
+  const password = qs('signup-password')?.value.trim();
+  const displayName = qs('signup-display-name')?.value.trim();
+
+  if (!email || !password || !displayName) {
+    return authMessage('Please fill all sign-up fields.', 'error');
+  }
+
   const { data, error } = await app.supabase.auth.signUp({
-    email, password,
-    options:{ data:{ display_name: displayName } }
+    email,
+    password,
+    options: { data: { display_name: displayName } }
   });
+
   if (error) return authMessage(error.message, 'error');
-  if (!data.session) return authMessage('Sign-up worked, but your project is still asking for email confirmation. Turn Confirm Email OFF in Supabase for instant sign-up.');
+
+  if (!data.session) {
+    return authMessage('Turn off email confirmation in Supabase for instant sign-up.', 'error');
+  }
+
   await ensureProfile(data.session);
   await boot();
 }
 
-async function signIn(){
-  const email = qs('login-email').value.trim();
-  const password = qs('login-password').value.trim();
-  if (!email || !password) return authMessage('Please enter email and password.', 'error');
+async function signIn() {
+  const email = qs('login-email')?.value.trim();
+  const password = qs('login-password')?.value.trim();
+
+  if (!email || !password) {
+    return authMessage('Enter email and password.', 'error');
+  }
+
   const { data, error } = await app.supabase.auth.signInWithPassword({ email, password });
   if (error) return authMessage(error.message, 'error');
+
   await ensureProfile(data.session);
   await boot();
 }
 
-async function signOut(){ await app.supabase.auth.signOut(); location.reload(); }
+async function signOut() {
+  await app.supabase.auth.signOut();
+  location.reload();
+}
 
-async function loadData(){
-  const [{ data: profile, error: pe }, { data: games, error: ge }, { data: predictions, error: pre }, { data: profiles, error: prfe }, { data: allPreds, error: ape }] = await Promise.all([
+async function loadData() {
+  const [
+    { data: profile, error: profileError },
+    { data: games, error: gamesError },
+    { data: predictions, error: predictionsError },
+    { data: profiles, error: profilesError },
+    { data: allPreds, error: allPredsError }
+  ] = await Promise.all([
     app.supabase.from('profiles').select('*').eq('id', app.user.id).single(),
     app.supabase.from('games').select('*').order('game_date').order('id'),
     app.supabase.from('predictions').select('*').eq('user_id', app.user.id),
     app.supabase.from('profiles').select('id, display_name'),
     app.supabase.from('predictions').select('user_id, game_id, prediction')
   ]);
-  if (pe) throw pe; if (ge) throw ge; if (pre) throw pre; if (prfe) throw prfe; if (ape) throw ape;
-  app.profile = profile; app.games = games || []; app.predictions = predictions || [];
+
+  if (profileError) throw profileError;
+  if (gamesError) throw gamesError;
+  if (predictionsError) throw predictionsError;
+  if (profilesError) throw profilesError;
+  if (allPredsError) throw allPredsError;
+
+  app.profile = profile;
+  app.games = games || [];
+  app.predictions = predictions || [];
   app.leaderboard = buildLeaderboard(profiles || [], allPreds || [], app.games);
 }
 
-function buildLeaderboard(profiles, allPreds, games){
+function buildLeaderboard(profiles, allPreds, games) {
   const gMap = new Map(games.map(g => [g.id, g]));
+
   return profiles.map(p => {
-    let attempted = 0, correct = 0;
-    allPreds.filter(x => x.user_id === p.id).forEach(pred => {
-      const game = gMap.get(pred.game_id);
-      if (game && game.result) { attempted += 1; if (game.result === pred.prediction) correct += 1; }
-    });
+    let attempted = 0;
+    let correct = 0;
+
+    allPreds
+      .filter(x => x.user_id === p.id)
+      .forEach(pred => {
+        const game = gMap.get(pred.game_id);
+        if (game && game.result) {
+          attempted += 1;
+          if (game.result === pred.prediction) correct += 1;
+        }
+      });
+
     const accuracy = attempted ? (correct / attempted) * 100 : 0;
-    return { name:p.display_name, attempted, correct, accuracy };
-  }).sort((a,b) => b.accuracy - a.accuracy || b.correct - a.correct || a.name.localeCompare(b.name));
+
+    return {
+      name: p.display_name,
+      attempted,
+      correct,
+      accuracy
+    };
+  }).sort((a, b) => b.accuracy - a.accuracy || b.correct - a.correct || a.name.localeCompare(b.name));
 }
 
-function renderTop(){
-  qs('app-title').textContent = cfg.APP_TITLE || 'Candidates 2026 Prediction League';
-  qs('user-pill').textContent = app.profile.display_name;
-  const isAdmin = !!app.profile.is_admin;
-  qs('admin-pill').classList.toggle('hidden', !isAdmin);
-  qs('admin-tab-btn').classList.toggle('hidden', !isAdmin);
+function buildStandings(games, tournament) {
+  const table = new Map();
 
-  let total = app.predictions.length, finished = 0, correct = 0;
+  games
+    .filter(g => g.tournament === tournament && g.result)
+    .forEach(game => {
+      const white = game.white_player;
+      const black = game.black_player;
+
+      if (!table.has(white)) {
+        table.set(white, { player: white, played: 0, wins: 0, draws: 0, losses: 0, points: 0 });
+      }
+      if (!table.has(black)) {
+        table.set(black, { player: black, played: 0, wins: 0, draws: 0, losses: 0, points: 0 });
+      }
+
+      const w = table.get(white);
+      const b = table.get(black);
+
+      w.played += 1;
+      b.played += 1;
+
+      if (game.result === 'white_win') {
+        w.wins += 1;
+        w.points += 1;
+        b.losses += 1;
+      } else if (game.result === 'black_win') {
+        b.wins += 1;
+        b.points += 1;
+        w.losses += 1;
+      } else if (game.result === 'draw') {
+        w.draws += 1;
+        b.draws += 1;
+        w.points += 0.5;
+        b.points += 0.5;
+      }
+    });
+
+  return Array.from(table.values()).sort(
+    (a, b) => b.points - a.points || b.wins - a.wins || a.player.localeCompare(b.player)
+  );
+}
+
+function renderTop() {
+  const titleEl = qs('app-title');
+  const userPill = qs('user-pill');
+  const adminPill = qs('admin-pill');
+  const adminTabBtn = qs('admin-tab-btn');
+
+  if (titleEl) titleEl.textContent = cfg.APP_TITLE || 'Candidates 2026 Prediction League';
+  if (userPill) userPill.textContent = app.profile.display_name;
+
+  const isAdmin = !!app.profile.is_admin;
+  adminPill?.classList.toggle('hidden', !isAdmin);
+  adminTabBtn?.classList.toggle('hidden', !isAdmin);
+
+  let total = app.predictions.length;
+  let finished = 0;
+  let correct = 0;
+
   app.predictions.forEach(pred => {
     const game = app.games.find(g => g.id === pred.game_id);
-    if (game && game.result) { finished += 1; if (game.result === pred.prediction) correct += 1; }
+    if (game && game.result) {
+      finished += 1;
+      if (game.result === pred.prediction) correct += 1;
+    }
   });
+
   const acc = finished ? ((correct / finished) * 100).toFixed(2) : '0.00';
-  qs('kpi-total').textContent = total;
-  qs('kpi-finished').textContent = finished;
-  qs('kpi-correct').textContent = correct;
-  qs('kpi-accuracy').textContent = acc + '%';
+
+  if (qs('kpi-total')) qs('kpi-total').textContent = total;
+  if (qs('kpi-finished')) qs('kpi-finished').textContent = finished;
+  if (qs('kpi-correct')) qs('kpi-correct').textContent = correct;
+  if (qs('kpi-accuracy')) qs('kpi-accuracy').textContent = acc + '%';
 }
 
-function renderFixtures(){
-  const wrap = qs('fixtures-list'); wrap.innerHTML = '';
+function renderFixtures() {
+  const wrap = qs('fixtures-list');
+  if (!wrap) return;
+
+  wrap.innerHTML = '';
   const map = predictionMap();
-  app.games.forEach(game => {
-    const status = getGameStatus(game);
-    const pred = map.get(game.id);
-    const editable = status === 'open';
-    wrap.insertAdjacentHTML('beforeend', `
-      <div class="fixture">
-        <div class="fixture-header">
-          <div>
-            <div class="players">${esc(game.white_player)} vs ${esc(game.black_player)}</div>
-            <div class="meta">Round ${game.round_no} • ${esc(game.game_date)} • Poll closes 5:59 PM IST</div>
+
+  app.games
+    .filter(game => game.tournament === currentTournament)
+    .forEach(game => {
+      const status = getGameStatus(game);
+      const pred = map.get(game.id);
+      const editable = status === 'open';
+
+      wrap.insertAdjacentHTML('beforeend', `
+        <div class="fixture">
+          <div class="fixture-header">
+            <div>
+              <div class="players">${esc(game.white_player)} vs ${esc(game.black_player)}</div>
+              <div class="meta">Round ${game.round_no} • ${esc(game.game_date)} • Poll closes 5:59 PM IST</div>
+              <div class="small">${esc(getCountdownText(game))}</div>
+            </div>
+            <span class="status ${status}">${labelStatus(status)}</span>
           </div>
-          <span class="status ${status}">${labelStatus(status)}</span>
+          <div class="choices">
+            <button class="choice-btn ${pred?.prediction === 'white_win' ? 'selected' : ''}" data-game="${game.id}" data-value="white_win" ${editable ? '' : 'disabled'}>${esc(game.white_player)} wins</button>
+            <button class="choice-btn ${pred?.prediction === 'draw' ? 'selected' : ''}" data-game="${game.id}" data-value="draw" ${editable ? '' : 'disabled'}>Draw</button>
+            <button class="choice-btn ${pred?.prediction === 'black_win' ? 'selected' : ''}" data-game="${game.id}" data-value="black_win" ${editable ? '' : 'disabled'}>${esc(game.black_player)} wins</button>
+          </div>
+          <div class="footer-note">
+            ${pred ? `Your pick: <strong>${labelResult(pred.prediction)}</strong>` : '<span class="muted">No prediction submitted yet.</span>'}
+            ${game.result ? `<div class="small">Result: <strong>${labelResult(game.result)}</strong></div>` : ''}
+          </div>
         </div>
-        <div class="choices">
-          <button class="choice-btn ${pred?.prediction === 'white_win' ? 'selected' : ''}" data-game="${game.id}" data-value="white_win" ${editable ? '' : 'disabled'}>${esc(game.white_player)} wins</button>
-          <button class="choice-btn ${pred?.prediction === 'draw' ? 'selected' : ''}" data-game="${game.id}" data-value="draw" ${editable ? '' : 'disabled'}>Draw</button>
-          <button class="choice-btn ${pred?.prediction === 'black_win' ? 'selected' : ''}" data-game="${game.id}" data-value="black_win" ${editable ? '' : 'disabled'}>${esc(game.black_player)} wins</button>
-        </div>
-        <div class="footer-note">
-          ${pred ? `Your pick: <strong>${labelResult(pred.prediction)}</strong>` : '<span class="muted">No prediction submitted yet.</span>'}
-          ${game.result ? `<div class="small">Result: <strong>${labelResult(game.result)}</strong></div>` : ''}
-        </div>
-      </div>
+      `);
+    });
+
+  wrap.querySelectorAll('.choice-btn').forEach(btn => {
+    btn.onclick = async () => {
+      const game_id = Number(btn.dataset.game);
+      const prediction = btn.dataset.value;
+
+      const { error } = await app.supabase
+        .from('predictions')
+        .upsert(
+          { user_id: app.user.id, game_id, prediction },
+          { onConflict: 'user_id,game_id' }
+        );
+
+      if (error) return alert(error.message);
+      await refresh();
+    };
+  });
+}
+
+function renderLeaderboard() {
+  const tbody = qs('leaderboard-body');
+  if (!tbody) return;
+
+  tbody.innerHTML = '';
+  app.leaderboard.forEach((row, idx) => {
+    tbody.insertAdjacentHTML('beforeend', `
+      <tr>
+        <td>${idx + 1}</td>
+        <td>${esc(row.name)}</td>
+        <td>${row.correct}</td>
+        <td>${row.attempted}</td>
+        <td>${row.accuracy.toFixed(2)}%</td>
+      </tr>
     `);
   });
-  wrap.querySelectorAll('.choice-btn').forEach(btn => btn.addEventListener('click', async () => {
-    const game_id = Number(btn.dataset.game), prediction = btn.dataset.value;
-    const existing = app.predictions.find(x => x.game_id === game_id);
-    let resp;
-    if (existing) resp = await app.supabase.from('predictions').update({ prediction }).eq('id', existing.id);
-    else resp = await app.supabase.from('predictions').insert({ user_id: app.user.id, game_id, prediction });
-    if (resp.error) return alert(resp.error.message);
-    await refresh();
-  }));
 }
 
-function renderLeaderboard(){
-  const tbody = qs('leaderboard-body'); tbody.innerHTML = '';
-  app.leaderboard.forEach((row, idx) => tbody.insertAdjacentHTML('beforeend', `
-    <tr>
-      <td>${idx + 1}</td>
-      <td>${esc(row.name)}</td>
-      <td>${row.correct}</td>
-      <td>${row.attempted}</td>
-      <td>${row.accuracy.toFixed(2)}%</td>
-    </tr>
-  `));
+function renderStandings() {
+  const tbody = qs('standings-body');
+  if (!tbody) return;
+
+  const standings = buildStandings(app.games, currentStandingsTournament);
+  tbody.innerHTML = '';
+
+  standings.forEach((row, idx) => {
+    tbody.insertAdjacentHTML('beforeend', `
+      <tr>
+        <td>${idx + 1}</td>
+        <td>${esc(row.player)}</td>
+        <td>${row.played}</td>
+        <td>${row.wins}</td>
+        <td>${row.draws}</td>
+        <td>${row.losses}</td>
+        <td>${row.points}</td>
+      </tr>
+    `);
+  });
 }
 
-function renderAdmin(){
+function renderAdmin() {
   const visible = !!app.profile.is_admin;
-  qs('admin-tab-btn').classList.toggle('hidden', !visible);
+  qs('admin-tab-btn')?.classList.toggle('hidden', !visible);
+
   if (!visible) return;
 
   const tbody = qs('admin-games-body');
+  if (!tbody) return;
+
   tbody.innerHTML = '';
 
-  app.games.forEach(game => tbody.insertAdjacentHTML('beforeend', `
-    <tr>
-      <td>${game.round_no}</td>
-      <td>${esc(game.game_date)}</td>
-      <td>${esc(game.white_player)} vs ${esc(game.black_player)}</td>
-      <td>
-        <select data-id="${game.id}">
-          <option value="" ${!game.result ? 'selected' : ''}>No result yet</option>
-          <option value="white_win" ${game.result === 'white_win' ? 'selected' : ''}>${esc(game.white_player)} wins</option>
-          <option value="draw" ${game.result === 'draw' ? 'selected' : ''}>Draw</option>
-          <option value="black_win" ${game.result === 'black_win' ? 'selected' : ''}>${esc(game.black_player)} wins</option>
-        </select>
-      </td>
-    </tr>
-  `));
+  app.games.forEach(game => {
+    tbody.insertAdjacentHTML('beforeend', `
+      <tr>
+        <td>${game.round_no}</td>
+        <td>${esc(game.game_date)}</td>
+        <td>${esc(game.white_player)} vs ${esc(game.black_player)} ${game.tournament ? `(${esc(game.tournament)})` : ''}</td>
+        <td>
+          <select data-id="${game.id}">
+            <option value="" ${!game.result ? 'selected' : ''}>No result yet</option>
+            <option value="white_win" ${game.result === 'white_win' ? 'selected' : ''}>${esc(game.white_player)} wins</option>
+            <option value="draw" ${game.result === 'draw' ? 'selected' : ''}>Draw</option>
+            <option value="black_win" ${game.result === 'black_win' ? 'selected' : ''}>${esc(game.black_player)} wins</option>
+          </select>
+        </td>
+      </tr>
+    `);
+  });
 
-  tbody.querySelectorAll('select').forEach(sel => sel.addEventListener('change', async () => {
-    const id = Number(sel.dataset.id), result = sel.value || null;
-    const { error } = await app.supabase.from('games').update({ result }).eq('id', id);
-    if (error) return alert(error.message);
-    await refresh();
-  }));
+  tbody.querySelectorAll('select').forEach(sel => {
+    sel.addEventListener('change', async () => {
+      const id = Number(sel.dataset.id);
+      const result = sel.value || null;
+
+      const { error } = await app.supabase
+        .from('games')
+        .update({ result })
+        .eq('id', id);
+
+      if (error) return alert(error.message);
+      await refresh();
+    });
+  });
 }
 
-async function refresh(){ await loadData(); renderTop(); renderFixtures(); renderLeaderboard(); renderAdmin(); }
-
-function activateTab(tab){
-  document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.toggle('active', btn.dataset.tab === tab));
-  document.querySelectorAll('.tab-panel').forEach(panel => panel.classList.toggle('hidden', panel.dataset.tabPanel !== tab));
+async function refresh() {
+  await loadData();
+  renderTop();
+  renderFixtures();
+  renderLeaderboard();
+  renderStandings();
+  renderAdmin();
 }
 
-async function boot(){
+function activateTab(tab) {
+  document.querySelectorAll('.tab-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.tab === tab);
+  });
+
+  document.querySelectorAll('.tab-panel').forEach(panel => {
+    panel.classList.toggle('hidden', panel.dataset.tabPanel !== tab);
+  });
+}
+
+async function boot() {
   if (!cfg.SUPABASE_URL || !cfg.SUPABASE_ANON_KEY || cfg.SUPABASE_URL.includes('PASTE_')) {
     return alert('Open config.js and paste your Supabase URL and key first.');
   }
-  if (!app.supabase) app.supabase = createClient(cfg.SUPABASE_URL, cfg.SUPABASE_ANON_KEY);
-  const { data:{ session } } = await app.supabase.auth.getSession();
+
+  if (!app.supabase) {
+    app.supabase = createClient(cfg.SUPABASE_URL, cfg.SUPABASE_ANON_KEY);
+  }
+
+  const { data: { session } } = await app.supabase.auth.getSession();
   app.user = session?.user || null;
-  if (!app.user) { show(qs('auth-screen')); hide(qs('app-screen')); return; }
-  hide(qs('auth-screen')); show(qs('app-screen'));
+
+  if (!app.user) {
+    show(qs('auth-screen'));
+    hide(qs('app-screen'));
+    return;
+  }
+
+  hide(qs('auth-screen'));
+  show(qs('app-screen'));
+
   await ensureProfile(session);
   await refresh();
 }
 
 document.addEventListener('DOMContentLoaded', async () => {
-  qs('signup-btn').addEventListener('click', signUp);
-  qs('login-btn').addEventListener('click', signIn);
-  qs('logout-btn').addEventListener('click', signOut);
-  document.querySelectorAll('.tab-btn').forEach(btn => btn.addEventListener('click', () => activateTab(btn.dataset.tab)));
+  qs('signup-btn') && (qs('signup-btn').onclick = signUp);
+  qs('login-btn') && (qs('login-btn').onclick = signIn);
+  qs('logout-btn') && (qs('logout-btn').onclick = signOut);
+
+  document.querySelectorAll('.tab-btn').forEach(btn => {
+    btn.addEventListener('click', () => activateTab(btn.dataset.tab));
+  });
+
+  qs('open-btn')?.addEventListener('click', () => {
+    currentTournament = 'open';
+    renderFixtures();
+  });
+
+  qs('women-btn')?.addEventListener('click', () => {
+    currentTournament = 'women';
+    renderFixtures();
+  });
+
+  qs('standings-open-btn')?.addEventListener('click', () => {
+    currentStandingsTournament = 'open';
+    renderStandings();
+  });
+
+  qs('standings-women-btn')?.addEventListener('click', () => {
+    currentStandingsTournament = 'women';
+    renderStandings();
+  });
+
   activateTab('fixtures');
   await boot();
+
+  setInterval(() => {
+    if (app.user) renderFixtures();
+  }, 60000);
 });
