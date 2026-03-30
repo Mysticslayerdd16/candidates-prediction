@@ -11,138 +11,162 @@
 </head>
 <body>
   <div class="container">
+
+    <!-- AUTH SCREEN -->
     <section id="auth-screen" class="auth-box">
       <div class="card">
         <div class="brand">
           <h1>Candidates 2026 Prediction League</h1>
           <p>Users sign up once, make predictions, and the leaderboard updates automatically.</p>
         </div>
+
         <div id="auth-message" class="notice hidden" style="margin-top:16px"></div>
+
         <div class="grid" style="margin-top:18px">
           <div class="card" style="padding:16px;background:#0f1729">
-            <h2 style="margin-top:0">Create account</h2>
-            <label>Display name<input id="signup-display-name" placeholder="e.g. Dipesh"></label>
-            <label>Email<input id="signup-email" type="email" placeholder="name@example.com"></label>
-            <label>Password<input id="signup-password" type="password" placeholder="Minimum 6 characters"></label>
+            <h2>Create account</h2>
+            <label>Display name<input id="signup-display-name"></label>
+            <label>Email<input id="signup-email" type="email"></label>
+            <label>Password<input id="signup-password" type="password"></label>
             <button id="signup-btn" class="primary">Sign up</button>
           </div>
+
           <div class="card" style="padding:16px;background:#0f1729">
-            <h2 style="margin-top:0">Log in</h2>
-            <label>Email<input id="login-email" type="email" placeholder="name@example.com"></label>
-            <label>Password<input id="login-password" type="password" placeholder="Your password"></label>
+            <h2>Log in</h2>
+            <label>Email<input id="login-email" type="email"></label>
+            <label>Password<input id="login-password" type="password"></label>
             <button id="login-btn" class="primary">Log in</button>
           </div>
         </div>
-        <p class="footer-note">Polls open at 12:00 AM IST on the game day and lock at 6:00 PM IST.</p>
       </div>
     </section>
 
+    <!-- APP -->
     <section id="app-screen" class="hidden">
+
       <div class="topbar">
         <div class="brand">
           <h1 id="app-title">Candidates 2026 Prediction League</h1>
-          <p>Round-robin predictions with live accuracy tracking.</p>
         </div>
-        <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+
+        <div>
           <span id="user-pill" class="status open">User</span>
           <span id="admin-pill" class="status completed hidden">Admin</span>
-          <button id="logout-btn" class="ghost">Log out</button>
+          <button id="logout-btn">Logout</button>
         </div>
       </div>
 
-      <div class="kpi-grid">
-        <div class="card kpi"><div class="label">My submissions</div><div id="kpi-total" class="value">0</div></div>
-        <div class="card kpi"><div class="label">Finished games predicted</div><div id="kpi-finished" class="value">0</div></div>
-        <div class="card kpi"><div class="label">Correct picks</div><div id="kpi-correct" class="value">0</div></div>
-        <div class="card kpi"><div class="label">Accuracy</div><div id="kpi-accuracy" class="value">0%</div></div>
-      </div>
-
+      <!-- TABS -->
       <div class="tabs">
         <button class="tab-btn active" data-tab="fixtures">Fixtures</button>
         <button class="tab-btn" data-tab="leaderboard">Leaderboard</button>
         <button class="tab-btn" data-tab="standings">Standings</button>
+        <button class="tab-btn" data-tab="round-predictions">Round Predictions</button>
         <button class="tab-btn" data-tab="rules">Rules</button>
         <button class="tab-btn hidden" data-tab="admin" id="admin-tab-btn">Admin</button>
       </div>
 
+      <!-- FIXTURES -->
       <div class="tab-panel" data-tab-panel="fixtures">
         <div class="card">
-          <div class="section-title"><h2>All games</h2></div>
-          <div style="margin:10px 0; display:flex; gap:8px; flex-wrap:wrap;">
-            <button id="open-btn" class="ghost">Open</button>
-            <button id="women-btn" class="ghost">Women</button>
+          <h2>All games</h2>
+
+          <div style="margin:10px 0;">
+            <button id="open-btn">Open</button>
+            <button id="women-btn">Women</button>
           </div>
-          <div class="small">White win / Draw / Black win</div>
-          <div id="fixtures-list" class="grid"></div>
+
+          <div id="fixtures-list"></div>
         </div>
       </div>
 
+      <!-- LEADERBOARD -->
       <div class="tab-panel hidden" data-tab-panel="leaderboard">
         <div class="card">
-          <div class="section-title"><h2>Leaderboard</h2><div class="small">Sorted by accuracy, then total correct picks</div></div>
-          <div class="table-wrap">
-            <table>
-              <thead><tr><th>Rank</th><th>User</th><th>Correct</th><th>Attempted finished games</th><th>Accuracy</th></tr></thead>
-              <tbody id="leaderboard-body"></tbody>
-            </table>
-          </div>
+          <h2>Leaderboard</h2>
+          <table>
+            <thead>
+              <tr>
+                <th>Rank</th>
+                <th>User</th>
+                <th>Correct</th>
+                <th>Attempted</th>
+                <th>Accuracy</th>
+              </tr>
+            </thead>
+            <tbody id="leaderboard-body"></tbody>
+          </table>
         </div>
       </div>
 
+      <!-- STANDINGS -->
       <div class="tab-panel hidden" data-tab-panel="standings">
         <div class="card">
-          <div class="section-title">
-            <h2>Candidate standings</h2>
-            <div class="small">Based on admin-updated results</div>
+          <h2>Standings</h2>
+
+          <div style="margin:10px 0;">
+            <button id="standings-open-btn">Open</button>
+            <button id="standings-women-btn">Women</button>
           </div>
-          <div style="margin:10px 0; display:flex; gap:8px; flex-wrap:wrap;">
-            <button id="standings-open-btn" class="ghost">Open</button>
-            <button id="standings-women-btn" class="ghost">Women</button>
-          </div>
-          <div class="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>Rank</th>
-                  <th>Player</th>
-                  <th>P</th>
-                  <th>W</th>
-                  <th>D</th>
-                  <th>L</th>
-                  <th>Pts</th>
-                </tr>
-              </thead>
-              <tbody id="standings-body"></tbody>
-            </table>
-          </div>
+
+          <table>
+            <thead>
+              <tr>
+                <th>Rank</th>
+                <th>Player</th>
+                <th>P</th>
+                <th>W</th>
+                <th>D</th>
+                <th>L</th>
+                <th>Pts</th>
+              </tr>
+            </thead>
+            <tbody id="standings-body"></tbody>
+          </table>
         </div>
       </div>
 
+      <!-- ROUND PREDICTIONS -->
+      <div class="tab-panel hidden" data-tab-panel="round-predictions">
+        <div class="card">
+          <h2>Round Predictions</h2>
+
+          <div style="margin:10px 0;">
+            <button id="round-open-btn">Open</button>
+            <button id="round-women-btn">Women</button>
+            <select id="round-select"></select>
+          </div>
+
+          <div id="round-predictions-message"></div>
+
+          <table>
+            <thead id="round-predictions-head"></thead>
+            <tbody id="round-predictions-body"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- RULES -->
       <div class="tab-panel hidden" data-tab-panel="rules">
         <div class="card">
-          <h2 style="margin-top:0">Rules</h2>
-          <div class="notice">Poll opens at 12:00 AM IST on the game day and locks at 6:00 PM IST. Users can edit their prediction until 5:59 PM IST.</div>
-          <hr class="sep">
-          <ul class="muted">
-            <li>Prediction options: White win, Draw, Black win.</li>
-            <li>Leaderboard accuracy uses only finished games that the user predicted.</li>
-            <li>Missed games do not count as wrong picks.</li>
-            <li>Only the admin can enter actual results.</li>
+          <h2>Rules</h2>
+          <ul>
+            <li>Predictions close at 5:59 PM IST.</li>
+            <li>Leaderboard is based on accuracy.</li>
           </ul>
         </div>
       </div>
 
-      <div class="tab-panel hidden" data-tab-panel="admin" id="admin-section">
+      <!-- ADMIN -->
+      <div class="tab-panel hidden" data-tab-panel="admin">
         <div class="card">
-          <div class="section-title"><h2>Admin: Enter results</h2><div class="small">Only visible for admin users</div></div>
-          <div class="table-wrap">
-            <table>
-              <thead><tr><th>Round</th><th>Date</th><th>Game</th><th>Result</th></tr></thead>
-              <tbody id="admin-games-body"></tbody>
-            </table>
-          </div>
+          <h2>Admin</h2>
+          <table>
+            <tbody id="admin-games-body"></tbody>
+          </table>
         </div>
       </div>
+
     </section>
   </div>
 
