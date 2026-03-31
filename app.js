@@ -60,6 +60,135 @@ function showToast(message) {
   }, 2600);
 }
 
+function launchConfetti(duration = 2400) {
+  const old = document.getElementById('egg-confetti');
+  if (old) old.remove();
+
+  const container = document.createElement('div');
+  container.id = 'egg-confetti';
+  container.style.position = 'fixed';
+  container.style.inset = '0';
+  container.style.pointerEvents = 'none';
+  container.style.zIndex = '9998';
+  document.body.appendChild(container);
+
+  const symbols = ['♟', '♞', '♛', '✨', '🏆', '⭐'];
+
+  for (let i = 0; i < 80; i++) {
+    const piece = document.createElement('div');
+    piece.textContent = symbols[Math.floor(Math.random() * symbols.length)];
+    piece.style.position = 'absolute';
+    piece.style.left = Math.random() * 100 + 'vw';
+    piece.style.top = '-40px';
+    piece.style.fontSize = (18 + Math.random() * 20) + 'px';
+    piece.style.opacity = '0.95';
+    piece.style.transform = `rotate(${Math.random() * 360}deg)`;
+    piece.style.transition = `transform ${1.8 + Math.random() * 1.8}s linear, top ${1.8 + Math.random() * 1.8}s linear, opacity 2.2s ease`;
+    container.appendChild(piece);
+
+    requestAnimationFrame(() => {
+      piece.style.top = '110vh';
+      piece.style.transform = `translateY(0) rotate(${720 + Math.random() * 720}deg)`;
+      piece.style.opacity = '0.15';
+    });
+  }
+
+  setTimeout(() => {
+    container.remove();
+  }, duration);
+}
+
+function showGrandEgg(title, subtitle, options = {}) {
+  const old = document.getElementById('grand-egg-overlay');
+  if (old) old.remove();
+
+  const overlay = document.createElement('div');
+  overlay.id = 'grand-egg-overlay';
+  overlay.style.position = 'fixed';
+  overlay.style.inset = '0';
+  overlay.style.background = 'rgba(5,10,20,0.84)';
+  overlay.style.backdropFilter = 'blur(8px)';
+  overlay.style.zIndex = '9999';
+  overlay.style.display = 'flex';
+  overlay.style.alignItems = 'center';
+  overlay.style.justifyContent = 'center';
+  overlay.style.padding = '24px';
+
+  const box = document.createElement('div');
+  box.style.maxWidth = '700px';
+  box.style.width = '100%';
+  box.style.background = 'linear-gradient(180deg, #0f172a 0%, #111827 100%)';
+  box.style.border = '1px solid rgba(255,255,255,0.14)';
+  box.style.borderRadius = '22px';
+  box.style.boxShadow = '0 24px 70px rgba(0,0,0,0.5)';
+  box.style.padding = '34px 28px';
+  box.style.textAlign = 'center';
+  box.style.color = 'white';
+  box.style.position = 'relative';
+  box.style.overflow = 'hidden';
+
+  const glow = document.createElement('div');
+  glow.style.position = 'absolute';
+  glow.style.width = '260px';
+  glow.style.height = '260px';
+  glow.style.background = 'radial-gradient(circle, rgba(99,102,241,0.34) 0%, rgba(99,102,241,0) 70%)';
+  glow.style.top = '-70px';
+  glow.style.right = '-50px';
+
+  const glow2 = document.createElement('div');
+  glow2.style.position = 'absolute';
+  glow2.style.width = '220px';
+  glow2.style.height = '220px';
+  glow2.style.background = 'radial-gradient(circle, rgba(34,197,94,0.18) 0%, rgba(34,197,94,0) 70%)';
+  glow2.style.bottom = '-60px';
+  glow2.style.left = '-30px';
+
+  const icon = document.createElement('div');
+  icon.textContent = options.icon || '♟';
+  icon.style.fontSize = '58px';
+  icon.style.marginBottom = '12px';
+
+  const h2 = document.createElement('h2');
+  h2.textContent = title;
+  h2.style.margin = '0 0 10px 0';
+  h2.style.fontSize = '34px';
+  h2.style.lineHeight = '1.15';
+
+  const p = document.createElement('p');
+  p.textContent = subtitle;
+  p.style.margin = '0';
+  p.style.fontSize = '16px';
+  p.style.lineHeight = '1.65';
+  p.style.opacity = '0.94';
+
+  const close = document.createElement('button');
+  close.textContent = options.buttonText || 'Close';
+  close.style.marginTop = '24px';
+  close.style.padding = '11px 20px';
+  close.style.borderRadius = '12px';
+  close.style.border = 'none';
+  close.style.background = '#2563eb';
+  close.style.color = 'white';
+  close.style.fontWeight = '700';
+  close.style.cursor = 'pointer';
+
+  close.onclick = () => overlay.remove();
+  overlay.onclick = e => {
+    if (e.target === overlay) overlay.remove();
+  };
+
+  box.appendChild(glow);
+  box.appendChild(glow2);
+  box.appendChild(icon);
+  box.appendChild(h2);
+  box.appendChild(p);
+  box.appendChild(close);
+  overlay.appendChild(box);
+  document.body.appendChild(overlay);
+
+  if (options.confetti) launchConfetti();
+}
+
 function getISTNow() {
   const parts = new Intl.DateTimeFormat('en-CA', {
     timeZone: 'Asia/Kolkata',
@@ -337,7 +466,11 @@ function maybeShowPerfectRoundEgg(roundGames, roundCorrect, profile) {
   if (perfectRoundShownKey === key) return;
 
   perfectRoundShownKey = key;
-  showToast('♟ Perfect round. Candidate-level prep.');
+  showGrandEgg(
+    '🏆 Flawless Round',
+    `All predictions correct in Round ${roundGames[0].round_no}. Candidate-level prep. This was a clean sweep.`,
+    { icon: '🏆', buttonText: 'Celebrate', confetti: true }
+  );
 }
 
 function renderTop() {
@@ -767,22 +900,26 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   let titleClicks = 0;
   let titleResetTimer = null;
+
   qs('app-title')?.addEventListener('click', () => {
     titleClicks += 1;
-
-    if (titleClicks === 5) {
-      showToast('♟ Hidden line discovered. Engine approves.');
-      titleClicks = 0;
-      if (titleResetTimer) clearTimeout(titleResetTimer);
-      titleResetTimer = null;
-      return;
-    }
 
     if (titleResetTimer) clearTimeout(titleResetTimer);
     titleResetTimer = setTimeout(() => {
       titleClicks = 0;
       titleResetTimer = null;
-    }, 2000);
+    }, 2200);
+
+    if (titleClicks === 5) {
+      showGrandEgg(
+        '♟ Secret Prep Room Unlocked',
+        'Engine eval: +0.7. Practical chances excellent. You found the hidden line in the position.',
+        { icon: '♞', buttonText: 'Enter prep mode', confetti: true }
+      );
+      titleClicks = 0;
+      if (titleResetTimer) clearTimeout(titleResetTimer);
+      titleResetTimer = null;
+    }
   });
 
   activateTab('polls');
