@@ -11,7 +11,9 @@ const app = {
   allPredictions: []
 };
 
-let currentTournament = 'open';
+let currentPollsTournament = 'open';
+let currentFixturesTournament = 'open';
+let currentLeaderboardTournament = 'open';
 let currentStandingsTournament = 'open';
 let currentRoundPredictionsTournament = 'open';
 
@@ -218,18 +220,19 @@ async function loadData() {
   app.predictions = predictions || [];
   app.allProfiles = profiles || [];
   app.allPredictions = allPreds || [];
-  app.leaderboard = buildLeaderboard(app.allProfiles, app.allPredictions, app.games);
 }
 
-function buildLeaderboard(profiles, allPreds, games) {
-  const gMap = new Map(games.map(g => [g.id, g]));
+function buildLeaderboard(profiles, allPreds, games, tournament) {
+  const filteredGames = games.filter(g => g.tournament === tournament);
+  const gMap = new Map(filteredGames.map(g => [g.id, g]));
+  const gameIds = new Set(filteredGames.map(g => g.id));
 
   return profiles.map(p => {
     let attempted = 0;
     let correct = 0;
 
     allPreds
-      .filter(x => x.user_id === p.id)
+      .filter(x => x.user_id === p.id && gameIds.has(x.game_id))
       .forEach(pred => {
         const game = gMap.get(pred.game_id);
         if (game && game.result) {
@@ -297,25 +300,22 @@ function getRoundsForTournament(tournament) {
 }
 
 function renderTop() {
-  const titleEl = qs('app-title');
-  const userPill = qs('user-pill');
-  const adminPill = qs('admin-pill');
-  const adminTabBtn = qs('admin-tab-btn');
-
-  if (titleEl) titleEl.textContent = cfg.APP_TITLE || 'Candidates 2026 Prediction League';
-  if (userPill) userPill.textContent = app.profile.display_name;
+  qs('app-title').textContent = cfg.APP_TITLE || 'Candidates 2026 Prediction League';
+  qs('user-pill').textContent = app.profile.display_name;
 
   const isAdmin = !!app.profile.is_admin;
-  adminPill?.classList.toggle('hidden', !isAdmin);
-  adminTabBtn?.classList.toggle('hidden', !isAdmin);
+  qs('admin-pill')?.classList.toggle('hidden', !isAdmin);
+  qs('admin-tab-btn')?.classList.toggle('hidden', !isAdmin);
 
-  let total = app.predictions.length;
+  let total = 0;
   let finished = 0;
   let correct = 0;
 
   app.predictions.forEach(pred => {
     const game = app.games.find(g => g.id === pred.game_id);
-    if (game && game.result) {
+    if (!game) return;
+    total += 1;
+    if (game.result) {
       finished += 1;
       if (game.result === pred.prediction) correct += 1;
     }
@@ -323,48 +323,53 @@ function renderTop() {
 
   const acc = finished ? ((correct / finished) * 100).toFixed(2) : '0.00';
 
-  if (qs('kpi-total')) qs('kpi-total').textContent = total;
-  if (qs('kpi-finished')) qs('kpi-finished').textContent = finished;
-  if (qs('kpi-correct')) qs('kpi-correct').textContent = correct;
-  if (qs('kpi-accuracy')) qs('kpi-accuracy').textContent = acc + '%';
+  qs('kpi-total').textContent = total;
+  qs('kpi-finished').textContent = finished;
+  qs('kpi-correct').textContent = correct;
+  qs('kpi-accuracy').textContent = acc + '%';
 }
 
-function renderFixtures() {
-  const wrap = qs('fixtures-list');
-  if (!wrap) return;
+function renderPolls() {
+  const wrap = qs('polls-list');
+  const msg = qs('polls-empty-message');
+  if (!wrap || !msg) return;
 
   wrap.innerHTML = '';
+  hide(msg);
+
   const map = predictionMap();
+  const openGames = app.games.filter(g => g.tournament === currentPollsTournament && getGameStatus(g) === 'open');
 
-  app.games
-    .filter(game => game.tournament === currentTournament)
-    .forEach(game => {
-      const status = getGameStatus(game);
-      const pred = map.get(game.id);
-      const editable = status === 'open';
+  if (!openGames.length) {
+    msg.textContent = 'No open polls right now. Check Fixtures for the full schedule.';
+    show(msg);
+    return;
+  }
 
-      wrap.insertAdjacentHTML('beforeend', `
-        <div class="fixture">
-          <div class="fixture-header">
-            <div>
-              <div class="players">${esc(game.white_player)} vs ${esc(game.black_player)}</div>
-              <div class="meta">Round ${game.round_no} • ${esc(game.game_date)} • Poll closes 5:59 PM IST</div>
-              <div class="small">${esc(getCountdownText(game))}</div>
-            </div>
-            <span class="status ${status}">${labelStatus(status)}</span>
+  openGames.forEach(game => {
+    const pred = map.get(game.id);
+
+    wrap.insertAdjacentHTML('beforeend', `
+      <div class="fixture">
+        <div class="fixture-header">
+          <div>
+            <div class="players">${esc(game.white_player)} vs ${esc(game.black_player)}</div>
+            <div class="meta">Round ${game.round_no} • ${esc(game.game_date)} • Poll closes 5:59 PM IST</div>
+            <div class="small">${esc(getCountdownText(game))}</div>
           </div>
-          <div class="choices">
-            <button class="choice-btn ${pred?.prediction === 'white_win' ? 'selected' : ''}" data-game="${game.id}" data-value="white_win" ${editable ? '' : 'disabled'}>${esc(game.white_player)} wins</button>
-            <button class="choice-btn ${pred?.prediction === 'draw' ? 'selected' : ''}" data-game="${game.id}" data-value="draw" ${editable ? '' : 'disabled'}>Draw</button>
-            <button class="choice-btn ${pred?.prediction === 'black_win' ? 'selected' : ''}" data-game="${game.id}" data-value="black_win" ${editable ? '' : 'disabled'}>${esc(game.black_player)} wins</button>
-          </div>
-          <div class="footer-note">
-            ${pred ? `Your pick: <strong>${labelResult(pred.prediction)}</strong>` : '<span class="muted">No prediction submitted yet.</span>'}
-            ${game.result ? `<div class="small">Result: <strong>${labelResult(game.result)}</strong></div>` : ''}
-          </div>
+          <span class="status open">Open now</span>
         </div>
-      `);
-    });
+        <div class="choices">
+          <button class="choice-btn ${pred?.prediction === 'white_win' ? 'selected' : ''}" data-game="${game.id}" data-value="white_win">${esc(game.white_player)} wins</button>
+          <button class="choice-btn ${pred?.prediction === 'draw' ? 'selected' : ''}" data-game="${game.id}" data-value="draw">Draw</button>
+          <button class="choice-btn ${pred?.prediction === 'black_win' ? 'selected' : ''}" data-game="${game.id}" data-value="black_win">${esc(game.black_player)} wins</button>
+        </div>
+        <div class="footer-note">
+          ${pred ? `Your pick: <strong>${labelResult(pred.prediction)}</strong>` : '<span class="muted">No prediction submitted yet.</span>'}
+        </div>
+      </div>
+    `);
+  });
 
   wrap.querySelectorAll('.choice-btn').forEach(btn => {
     btn.onclick = async () => {
@@ -384,12 +389,55 @@ function renderFixtures() {
   });
 }
 
+function renderFixtures() {
+  const wrap = qs('fixtures-list');
+  if (!wrap) return;
+
+  wrap.innerHTML = '';
+
+  const games = app.games
+    .filter(g => g.tournament === currentFixturesTournament)
+    .sort((a, b) => a.round_no - b.round_no || a.id - b.id);
+
+  let currentRound = null;
+
+  games.forEach(game => {
+    if (currentRound !== game.round_no) {
+      currentRound = game.round_no;
+      wrap.insertAdjacentHTML('beforeend', `
+        <div class="card" style="grid-column:1/-1; margin-bottom:4px;">
+          <div class="section-title"><h2 style="margin:0;">Round ${currentRound}</h2></div>
+        </div>
+      `);
+    }
+
+    const status = getGameStatus(game);
+
+    wrap.insertAdjacentHTML('beforeend', `
+      <div class="fixture">
+        <div class="fixture-header">
+          <div>
+            <div class="players">${esc(game.white_player)} vs ${esc(game.black_player)}</div>
+            <div class="meta">${esc(game.game_date)}</div>
+          </div>
+          <span class="status ${status}">${labelStatus(status)}</span>
+        </div>
+        <div class="footer-note">
+          ${game.result ? `<div class="small">Result: <strong>${labelResult(game.result)}</strong></div>` : '<span class="muted">Result not updated yet.</span>'}
+        </div>
+      </div>
+    `);
+  });
+}
+
 function renderLeaderboard() {
   const tbody = qs('leaderboard-body');
   if (!tbody) return;
 
+  const leaderboard = buildLeaderboard(app.allProfiles, app.allPredictions, app.games, currentLeaderboardTournament);
+
   tbody.innerHTML = '';
-  app.leaderboard.forEach((row, idx) => {
+  leaderboard.forEach((row, idx) => {
     tbody.insertAdjacentHTML('beforeend', `
       <tr>
         <td>${idx + 1}</td>
@@ -568,6 +616,7 @@ function renderAdmin() {
 async function refresh() {
   await loadData();
   renderTop();
+  renderPolls();
   renderFixtures();
   renderLeaderboard();
   renderStandings();
@@ -619,14 +668,34 @@ document.addEventListener('DOMContentLoaded', async () => {
     btn.addEventListener('click', () => activateTab(btn.dataset.tab));
   });
 
-  qs('open-btn')?.addEventListener('click', () => {
-    currentTournament = 'open';
+  qs('polls-open-btn')?.addEventListener('click', () => {
+    currentPollsTournament = 'open';
+    renderPolls();
+  });
+
+  qs('polls-women-btn')?.addEventListener('click', () => {
+    currentPollsTournament = 'women';
+    renderPolls();
+  });
+
+  qs('fixtures-open-btn')?.addEventListener('click', () => {
+    currentFixturesTournament = 'open';
     renderFixtures();
   });
 
-  qs('women-btn')?.addEventListener('click', () => {
-    currentTournament = 'women';
+  qs('fixtures-women-btn')?.addEventListener('click', () => {
+    currentFixturesTournament = 'women';
     renderFixtures();
+  });
+
+  qs('leaderboard-open-btn')?.addEventListener('click', () => {
+    currentLeaderboardTournament = 'open';
+    renderLeaderboard();
+  });
+
+  qs('leaderboard-women-btn')?.addEventListener('click', () => {
+    currentLeaderboardTournament = 'women';
+    renderLeaderboard();
   });
 
   qs('standings-open-btn')?.addEventListener('click', () => {
@@ -653,10 +722,12 @@ document.addEventListener('DOMContentLoaded', async () => {
     renderRoundPredictions();
   });
 
-  activateTab('fixtures');
+  activateTab('polls');
   await boot();
 
   setInterval(() => {
-    if (app.user) renderFixtures();
+    if (app.user) {
+      renderPolls();
+    }
   }, 60000);
 });
