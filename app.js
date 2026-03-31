@@ -16,6 +16,7 @@ let currentFixturesTournament = 'open';
 let currentLeaderboardTournament = 'open';
 let currentStandingsTournament = 'open';
 let currentRoundPredictionsTournament = 'open';
+let perfectRoundShownKey = null;
 
 const qs = id => document.getElementById(id);
 const show = el => el && el.classList.remove('hidden');
@@ -29,6 +30,34 @@ function esc(v = '') {
     '"': '&quot;',
     "'": '&#39;'
   }[m]));
+}
+
+function showToast(message) {
+  const oldToast = document.getElementById('app-toast');
+  if (oldToast) oldToast.remove();
+
+  const toast = document.createElement('div');
+  toast.id = 'app-toast';
+  toast.textContent = message;
+  toast.style.position = 'fixed';
+  toast.style.bottom = '20px';
+  toast.style.left = '50%';
+  toast.style.transform = 'translateX(-50%)';
+  toast.style.background = '#111827';
+  toast.style.color = '#fff';
+  toast.style.padding = '12px 18px';
+  toast.style.borderRadius = '10px';
+  toast.style.boxShadow = '0 6px 20px rgba(0,0,0,0.25)';
+  toast.style.zIndex = '9999';
+  toast.style.fontSize = '14px';
+  toast.style.maxWidth = '90vw';
+  toast.style.textAlign = 'center';
+
+  document.body.appendChild(toast);
+
+  setTimeout(() => {
+    toast.remove();
+  }, 2600);
 }
 
 function getISTNow() {
@@ -299,6 +328,18 @@ function getRoundsForTournament(tournament) {
   )].sort((a, b) => a - b);
 }
 
+function maybeShowPerfectRoundEgg(roundGames, roundCorrect, profile) {
+  if (!app.user) return;
+  if (profile.id !== app.user.id) return;
+  if (!roundGames.length || roundCorrect !== roundGames.length) return;
+
+  const key = `${currentRoundPredictionsTournament}-${roundGames[0].round_no}-${profile.id}`;
+  if (perfectRoundShownKey === key) return;
+
+  perfectRoundShownKey = key;
+  showToast('♟ Perfect round. Candidate-level prep.');
+}
+
 function renderTop() {
   qs('app-title').textContent = cfg.APP_TITLE || 'Candidates 2026 Prediction League';
   qs('user-pill').textContent = app.profile.display_name;
@@ -558,6 +599,8 @@ function renderRoundPredictions() {
         `;
       }).join('');
 
+      maybeShowPerfectRoundEgg(roundGames, roundCorrect, profile);
+
       bodyEl.insertAdjacentHTML('beforeend', `
         <tr>
           <td>${esc(profile.display_name)}</td>
@@ -720,6 +763,26 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   qs('round-select')?.addEventListener('change', () => {
     renderRoundPredictions();
+  });
+
+  let titleClicks = 0;
+  let titleResetTimer = null;
+  qs('app-title')?.addEventListener('click', () => {
+    titleClicks += 1;
+
+    if (titleClicks === 5) {
+      showToast('♟ Hidden line discovered. Engine approves.');
+      titleClicks = 0;
+      if (titleResetTimer) clearTimeout(titleResetTimer);
+      titleResetTimer = null;
+      return;
+    }
+
+    if (titleResetTimer) clearTimeout(titleResetTimer);
+    titleResetTimer = setTimeout(() => {
+      titleClicks = 0;
+      titleResetTimer = null;
+    }, 2000);
   });
 
   activateTab('polls');
