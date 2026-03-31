@@ -17,6 +17,7 @@ let currentLeaderboardTournament = 'open';
 let currentStandingsTournament = 'open';
 let currentRoundPredictionsTournament = 'open';
 let perfectRoundShownKey = null;
+let isRecoveryMode = false;
 
 const qs = id => document.getElementById(id);
 const show = el => el && el.classList.remove('hidden');
@@ -269,6 +270,18 @@ function predictionMap() {
   return m;
 }
 
+function showResetScreen(message = '') {
+  hide(qs('auth-screen'));
+  hide(qs('app-screen'));
+  show(qs('reset-screen'));
+  const el = qs('reset-message');
+  if (el) {
+    el.textContent = message || 'Enter your new password below.';
+    el.className = 'notice';
+    show(el);
+  }
+}
+
 async function ensureProfile(session) {
   const user = session?.user;
   if (!user) return null;
@@ -301,6 +314,14 @@ async function ensureProfile(session) {
 
 function authMessage(msg, type = 'ok') {
   const el = qs('auth-message');
+  if (!el) return;
+  el.className = 'notice' + (type === 'error' ? ' error' : '');
+  el.textContent = msg;
+  show(el);
+}
+
+function resetMessage(msg, type = 'ok') {
+  const el = qs('reset-message');
   if (!el) return;
   el.className = 'notice' + (type === 'error' ? ' error' : '');
   el.textContent = msg;
@@ -345,6 +366,59 @@ async function signIn() {
 
   await ensureProfile(data.session);
   await boot();
+}
+
+async function sendPasswordReset() {
+  const email = qs('login-email')?.value.trim();
+
+  if (!email) {
+    return authMessage('Enter your email first, then click Forgot Password.', 'error');
+  }
+
+  const { error } = await app.supabase.auth.resetPasswordForEmail(email, {
+    redirectTo: window.location.origin
+  });
+
+  if (error) {
+    authMessage(error.message, 'error');
+  } else {
+    authMessage('Password reset link sent to your email.');
+  }
+}
+
+async function saveNewPassword() {
+  const password = qs('reset-password')?.value.trim();
+  const confirm = qs('reset-password-confirm')?.value.trim();
+
+  if (!password || !confirm) {
+    return resetMessage('Please fill both password fields.', 'error');
+  }
+
+  if (password.length < 6) {
+    return resetMessage('Password must be at least 6 characters.', 'error');
+  }
+
+  if (password !== confirm) {
+    return resetMessage('Passwords do not match.', 'error');
+  }
+
+  const { error } = await app.supabase.auth.updateUser({ password });
+
+  if (error) {
+    return resetMessage(error.message, 'error');
+  }
+
+  resetMessage('Password updated successfully. Please log in with your new password.');
+  isRecoveryMode = false;
+
+  setTimeout(async () => {
+    await app.supabase.auth.signOut();
+    hide(qs('reset-screen'));
+    show(qs('auth-screen'));
+    hide(qs('app-screen'));
+    qs('reset-password').value = '';
+    qs('reset-password-confirm').value = '';
+  }, 1200);
 }
 
 async function signOut() {
@@ -819,16 +893,30 @@ async function boot() {
     app.supabase = createClient(cfg.SUPABASE_URL, cfg.SUPABASE_ANON_KEY);
   }
 
+  const urlHash = window.location.hash || '';
+  const urlSearch = window.location.search || '';
+  const recoveryInUrl =
+    urlHash.includes('type=recovery') ||
+    urlSearch.includes('type=recovery');
+
+  if (recoveryInUrl) {
+    isRecoveryMode = true;
+    showResetScreen('Recovery link detected. Set your new password below.');
+    return;
+  }
+
   const { data: { session } } = await app.supabase.auth.getSession();
   app.user = session?.user || null;
 
   if (!app.user) {
     show(qs('auth-screen'));
+    hide(qs('reset-screen'));
     hide(qs('app-screen'));
     return;
   }
 
   hide(qs('auth-screen'));
+  hide(qs('reset-screen'));
   show(qs('app-screen'));
 
   await ensureProfile(session);
@@ -839,6 +927,8 @@ document.addEventListener('DOMContentLoaded', async () => {
   qs('signup-btn') && (qs('signup-btn').onclick = signUp);
   qs('login-btn') && (qs('login-btn').onclick = signIn);
   qs('logout-btn') && (qs('logout-btn').onclick = signOut);
+  qs('forgot-password-btn') && (qs('forgot-password-btn').onclick = sendPasswordReset);
+  qs('reset-password-btn') && (qs('reset-password-btn').onclick = saveNewPassword);
 
   document.querySelectorAll('.tab-btn').forEach(btn => {
     btn.addEventListener('click', () => activateTab(btn.dataset.tab));
@@ -926,7 +1016,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   await boot();
 
   setInterval(() => {
-    if (app.user) {
+    if (app.user && !isRecoveryMode) {
       renderPolls();
     }
   }, 60000);

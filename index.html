@@ -31,9 +31,25 @@
             <label>Email<input id="login-email" type="email" placeholder="name@example.com"></label>
             <label>Password<input id="login-password" type="password" placeholder="Your password"></label>
             <button id="login-btn" class="primary">Log in</button>
+            <button id="forgot-password-btn" class="ghost" style="margin-top:10px;">Forgot Password?</button>
           </div>
         </div>
         <p class="footer-note">Polls open at 12:00 AM IST on the game day and lock at 6:00 PM IST.</p>
+      </div>
+    </section>
+
+    <section id="reset-screen" class="auth-box hidden">
+      <div class="card" style="max-width:560px;margin:0 auto;">
+        <div class="brand">
+          <h1>Reset your password</h1>
+          <p>Set a new password for your account.</p>
+        </div>
+        <div id="reset-message" class="notice hidden" style="margin-top:16px"></div>
+        <div class="card" style="padding:16px;background:#0f1729;margin-top:18px;">
+          <label>New password<input id="reset-password" type="password" placeholder="Minimum 6 characters"></label>
+          <label>Confirm password<input id="reset-password-confirm" type="password" placeholder="Re-enter password"></label>
+          <button id="reset-password-btn" class="primary">Save new password</button>
+        </div>
       </div>
     </section>
 
