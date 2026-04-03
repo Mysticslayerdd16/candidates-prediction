@@ -464,14 +464,29 @@ function buildLeaderboard(profiles, allPreds, games, tournament) {
   const gMap = new Map(filteredGames.map(g => [g.id, g]));
   const gameIds = new Set(filteredGames.map(g => g.id));
 
+  // 👉 Identify latest round
+  const latestRound = Math.max(...filteredGames.map(g => g.round_no));
+  const latestRoundGameIds = new Set(
+    filteredGames
+      .filter(g => g.round_no === latestRound)
+      .map(g => g.id)
+  );
+
   return profiles.map(p => {
     let attempted = 0;
     let correct = 0;
+    let votedInLatestRound = false;
 
     allPreds
       .filter(x => x.user_id === p.id && gameIds.has(x.game_id))
       .forEach(pred => {
         const game = gMap.get(pred.game_id);
+
+        // 👉 Track latest round participation
+        if (latestRoundGameIds.has(pred.game_id)) {
+          votedInLatestRound = true;
+        }
+
         if (game && game.result) {
           attempted += 1;
           if (game.result === pred.prediction) correct += 1;
@@ -484,9 +499,17 @@ function buildLeaderboard(profiles, allPreds, games, tournament) {
       name: p.display_name,
       attempted,
       correct,
-      accuracy
+      accuracy,
+      votedInLatestRound
     };
-  }).sort((a, b) => b.accuracy - a.accuracy || b.correct - a.correct || a.name.localeCompare(b.name));
+  }).sort((a, b) => {
+    // 👉 Push inactive users to bottom
+    if (!a.votedInLatestRound && b.votedInLatestRound) return 1;
+    if (a.votedInLatestRound && !b.votedInLatestRound) return -1;
+
+    // 👉 Normal ranking
+    return b.accuracy - a.accuracy || b.correct - a.correct || a.name.localeCompare(b.name);
+  });
 }
 
 function buildStandings(games, tournament) {
