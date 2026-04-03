@@ -922,8 +922,9 @@ function renderUserStats() {
   const correctEl = qs('stats-correct-predictions');
   const accuracyEl = qs('stats-overall-accuracy');
   const bodyEl = qs('user-stats-body');
+  const natureBodyEl = qs('user-prediction-nature-body');
 
-  if (!select || !totalEl || !finishedEl || !correctEl || !accuracyEl || !bodyEl) return;
+  if (!select || !totalEl || !finishedEl || !correctEl || !accuracyEl || !bodyEl || !natureBodyEl) return;
 
   populateUserStatsSelect();
 
@@ -983,6 +984,62 @@ function renderUserStats() {
       <td>${r.finished}</td>
       <td>${r.correct}</td>
       <td>${r.acc.toFixed(2)}%</td>
+    </tr>
+  `).join('');
+
+  const natureRows = tournaments.map(tournament => {
+    const tGames = app.games.filter(g => g.tournament === tournament);
+    const tGameIds = new Set(tGames.map(g => g.id));
+    const preds = userPredictions.filter(p => tGameIds.has(p.game_id));
+
+    let whiteWin = 0;
+    let draw = 0;
+    let blackWin = 0;
+
+    preds.forEach(pred => {
+      if (pred.prediction === 'white_win') whiteWin += 1;
+      else if (pred.prediction === 'draw') draw += 1;
+      else if (pred.prediction === 'black_win') blackWin += 1;
+    });
+
+    const total = preds.length;
+
+    const formatMix = count => {
+      const pct = total ? ((count / total) * 100).toFixed(1) : '0.0';
+      return `${count} (${pct}%)`;
+    };
+
+    return {
+      tournament: tournament === 'open' ? 'Open' : 'Women',
+      whiteWin: formatMix(whiteWin),
+      draw: formatMix(draw),
+      blackWin: formatMix(blackWin)
+    };
+  });
+
+  const totalNature = userPredictions.length;
+  const totalWhiteWin = userPredictions.filter(p => p.prediction === 'white_win').length;
+  const totalDraw = userPredictions.filter(p => p.prediction === 'draw').length;
+  const totalBlackWin = userPredictions.filter(p => p.prediction === 'black_win').length;
+
+  const formatOverallMix = count => {
+    const pct = totalNature ? ((count / totalNature) * 100).toFixed(1) : '0.0';
+    return `${count} (${pct}%)`;
+  };
+
+  natureRows.push({
+    tournament: 'Combined',
+    whiteWin: formatOverallMix(totalWhiteWin),
+    draw: formatOverallMix(totalDraw),
+    blackWin: formatOverallMix(totalBlackWin)
+  });
+
+  natureBodyEl.innerHTML = natureRows.map(r => `
+    <tr>
+      <td>${esc(r.tournament)}</td>
+      <td>${r.whiteWin}</td>
+      <td>${r.draw}</td>
+      <td>${r.blackWin}</td>
     </tr>
   `).join('');
 }
