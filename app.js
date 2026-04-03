@@ -18,6 +18,7 @@ let currentStandingsTournament = 'open';
 let currentRoundPredictionsTournament = 'open';
 let perfectRoundShownKey = null;
 let isRecoveryMode = false;
+let currentStatsUserId = null;
 
 const qs = id => document.getElementById(id);
 const show = el => el && el.classList.remove('hidden');
@@ -888,6 +889,104 @@ function renderRoundPredictions() {
     });
 }
 
+function populateUserStatsSelect() {
+  const select = qs('user-stats-select');
+  if (!select) return;
+
+  const currentValue = currentStatsUserId || select.value || app.user?.id || '';
+
+  const users = app.allProfiles
+    .slice()
+    .sort((a, b) => a.display_name.localeCompare(b.display_name));
+
+  select.innerHTML = users.map(user => `
+    <option value="${user.id}">${esc(user.display_name)}</option>
+  `).join('');
+
+  if (users.find(u => u.id === currentValue)) {
+    select.value = currentValue;
+    currentStatsUserId = currentValue;
+  } else if (app.user?.id) {
+    select.value = app.user.id;
+    currentStatsUserId = app.user.id;
+  } else if (users.length) {
+    select.value = users[0].id;
+    currentStatsUserId = users[0].id;
+  }
+}
+
+function renderUserStats() {
+  const select = qs('user-stats-select');
+  const totalEl = qs('stats-total-predictions');
+  const finishedEl = qs('stats-finished-predictions');
+  const correctEl = qs('stats-correct-predictions');
+  const accuracyEl = qs('stats-overall-accuracy');
+  const bodyEl = qs('user-stats-body');
+
+  if (!select || !totalEl || !finishedEl || !correctEl || !accuracyEl || !bodyEl) return;
+
+  populateUserStatsSelect();
+
+  const selectedUserId = currentStatsUserId || select.value;
+  if (!selectedUserId) return;
+
+  const userPredictions = app.allPredictions.filter(p => p.user_id === selectedUserId);
+
+  const tournaments = ['open', 'women'];
+  let totalPredictions = 0;
+  let totalFinished = 0;
+  let totalCorrect = 0;
+
+  const rows = tournaments.map(tournament => {
+    const tGames = app.games.filter(g => g.tournament === tournament);
+    const tGameIds = new Set(tGames.map(g => g.id));
+
+    const preds = userPredictions.filter(p => tGameIds.has(p.game_id));
+
+    let finished = 0;
+    let correct = 0;
+
+    preds.forEach(pred => {
+      const game = tGames.find(g => g.id === pred.game_id);
+      if (game && game.result) {
+        finished += 1;
+        if (game.result === pred.prediction) correct += 1;
+      }
+    });
+
+    totalPredictions += preds.length;
+    totalFinished += finished;
+    totalCorrect += correct;
+
+    const acc = finished ? (correct / finished) * 100 : 0;
+
+    return {
+      tournament: tournament === 'open' ? 'Open' : 'Women',
+      predictions: preds.length,
+      finished,
+      correct,
+      acc
+    };
+  });
+
+  const overallAcc = totalFinished ? (totalCorrect / totalFinished) * 100 : 0;
+
+  totalEl.textContent = totalPredictions;
+  finishedEl.textContent = totalFinished;
+  correctEl.textContent = totalCorrect;
+  accuracyEl.textContent = overallAcc.toFixed(2) + '%';
+
+  bodyEl.innerHTML = rows.map(r => `
+    <tr>
+      <td>${esc(r.tournament)}</td>
+      <td>${r.predictions}</td>
+      <td>${r.finished}</td>
+      <td>${r.correct}</td>
+      <td>${r.acc.toFixed(2)}%</td>
+    </tr>
+  `).join('');
+}
+
 function renderAdmin() {
   const visible = !!app.profile.is_admin;
   qs('admin-tab-btn')?.classList.toggle('hidden', !visible);
@@ -941,6 +1040,7 @@ async function refresh() {
   renderLeaderboard();
   renderStandings();
   renderRoundPredictions();
+  renderUserStats();
   renderAdmin();
 }
 
@@ -1060,6 +1160,11 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   qs('round-select')?.addEventListener('change', () => {
     renderRoundPredictions();
+	
+  qs('user-stats-select')?.addEventListener('change', e => {
+    currentStatsUserId = e.target.value;
+    renderUserStats();
+	
   });
 
   let titleClicks = 0;

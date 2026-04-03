@@ -83,6 +83,7 @@
 
       <div class="tabs">
         <button class="tab-btn active" data-tab="polls" type="button">Polls</button>
+		<button class="tab-btn" data-tab="user-stats" type="button">User Stats</button>
         <button class="tab-btn" data-tab="fixtures" type="button">Fixtures</button>
         <button class="tab-btn" data-tab="leaderboard" type="button">Leaderboard</button>
         <button class="tab-btn" data-tab="standings" type="button">Standings</button>
@@ -219,6 +220,59 @@
           </ul>
         </div>
       </div>
+	  
+	  
+	  <div class="tab-panel hidden" data-tab-panel="user-stats">
+        <div class="card">
+          <div class="section-title">
+      <h2>User statistics</h2>
+      <div class="small">Prediction performance for any participant</div>
+    </div>
+
+    <div style="margin:10px 0 16px 0; display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
+      <label style="display:flex; align-items:center; gap:8px;">
+        <span class="small">User</span>
+        <select id="user-stats-select"></select>
+      </label>
+    </div>
+
+    <div class="kpi-grid">
+      <div class="card kpi">
+        <div class="label">Total predictions</div>
+        <div id="stats-total-predictions" class="value">0</div>
+      </div>
+      <div class="card kpi">
+        <div class="label">Finished games predicted</div>
+        <div id="stats-finished-predictions" class="value">0</div>
+      </div>
+      <div class="card kpi">
+        <div class="label">Correct picks</div>
+        <div id="stats-correct-predictions" class="value">0</div>
+      </div>
+      <div class="card kpi">
+        <div class="label">Overall accuracy</div>
+        <div id="stats-overall-accuracy" class="value">0%</div>
+      </div>
+    </div>
+
+    <hr class="sep">
+
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Tournament</th>
+            <th>Predictions</th>
+            <th>Finished predicted</th>
+            <th>Correct</th>
+            <th>Accuracy</th>
+          </tr>
+        </thead>
+        <tbody id="user-stats-body"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
 
       <div class="tab-panel hidden" data-tab-panel="admin" id="admin-section">
         <div class="card">
