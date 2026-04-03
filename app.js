@@ -464,55 +464,62 @@ function buildLeaderboard(profiles, allPreds, games, tournament) {
   const gMap = new Map(filteredGames.map(g => [g.id, g]));
   const gameIds = new Set(filteredGames.map(g => g.id));
 
-  // Latest round with at least one result updated
-  const roundsWithResults = [...new Set(
+  const now = getISTNow();
+
+  const rounds = [...new Set(filteredGames.map(g => g.round_no))].sort((a, b) => a - b);
+
+  // Current round = earliest round scheduled for today or later in IST
+  const currentRoundCandidates = [...new Set(
     filteredGames
-      .filter(g => !!g.result)
+      .filter(g => g.game_date >= now.date)
       .map(g => g.round_no)
-  )];
+  )].sort((a, b) => a - b);
 
-  const latestRound = roundsWithResults.length
-    ? Math.max(...roundsWithResults)
-    : null;
+  const currentRound = currentRoundCandidates.length
+    ? currentRoundCandidates[0]
+    : (rounds.length ? Math.max(...rounds) : null);
 
-  const latestRoundGameIds = new Set(
-    filteredGames
-      .filter(g => g.round_no === latestRound)
-      .map(g => g.id)
-  );
+  const targetRound = currentRound !== null ? currentRound - 1 : null;
+
+  const targetRoundGames = filteredGames.filter(g => g.round_no === targetRound);
+  const targetRoundGameIds = new Set(targetRoundGames.map(g => g.id));
+  const targetRoundGameCount = targetRoundGames.length;
 
   return profiles.map(p => {
     let attempted = 0;
     let correct = 0;
-    let votedInLatestRound = false;
+    let targetRoundVotes = 0;
 
-    allPreds
-      .filter(x => x.user_id === p.id && gameIds.has(x.game_id))
-      .forEach(pred => {
-        const game = gMap.get(pred.game_id);
+    const userPreds = allPreds.filter(x => x.user_id === p.id && gameIds.has(x.game_id));
 
-        if (latestRoundGameIds.has(pred.game_id)) {
-          votedInLatestRound = true;
-        }
+    userPreds.forEach(pred => {
+      const game = gMap.get(pred.game_id);
 
-        if (game && game.result) {
-          attempted += 1;
-          if (game.result === pred.prediction) correct += 1;
-        }
-      });
+      if (targetRoundGameIds.has(pred.game_id)) {
+        targetRoundVotes += 1;
+      }
+
+      if (game && game.result) {
+        attempted += 1;
+        if (game.result === pred.prediction) correct += 1;
+      }
+    });
 
     const accuracy = attempted ? (correct / attempted) * 100 : 0;
+
+    // Active only if user voted in all games of target round
+    const votedInTargetRound = targetRoundGameCount > 0 && targetRoundVotes === targetRoundGameCount;
 
     return {
       name: p.display_name,
       attempted,
       correct,
       accuracy,
-      votedInLatestRound
+      votedInTargetRound
     };
   }).sort((a, b) => {
-    if (!a.votedInLatestRound && b.votedInLatestRound) return 1;
-    if (a.votedInLatestRound && !b.votedInLatestRound) return -1;
+    if (!a.votedInTargetRound && b.votedInTargetRound) return 1;
+    if (a.votedInTargetRound && !b.votedInTargetRound) return -1;
 
     return b.accuracy - a.accuracy || b.correct - a.correct || a.name.localeCompare(b.name);
   });
