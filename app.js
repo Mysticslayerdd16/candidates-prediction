@@ -721,7 +721,7 @@ function renderFixtures() {
       <div class="fixture">
         <div class="fixture-header">
           <div>
-            <div class="players">${esc(game.white_player)} vs ${esc(game.black_player)}</div><div class="players">
+            <div class="players">
 			  ${game.lichess_url
 			    ? `<a href="${esc(game.lichess_url)}" target="_blank" style="color:inherit;text-decoration:none;">
 					${esc(game.white_player)} vs ${esc(game.black_player)}
@@ -1160,11 +1160,10 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   qs('round-select')?.addEventListener('change', () => {
     renderRoundPredictions();
-	
+  });
   qs('user-stats-select')?.addEventListener('change', e => {
     currentStatsUserId = e.target.value;
     renderUserStats();
-	
   });
 
   let titleClicks = 0;
