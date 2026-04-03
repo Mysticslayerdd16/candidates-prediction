@@ -13,7 +13,7 @@ const app = {
 
 let currentPollsTournament = 'open';
 let currentFixturesTournament = 'open';
-let currentLeaderboardTournament = 'open';
+let currentLeaderboardTournament = 'combined';
 let currentStandingsTournament = 'open';
 let currentRoundPredictionsTournament = 'open';
 let perfectRoundShownKey = null;
@@ -375,6 +375,8 @@ async function sendPasswordReset() {
     return authMessage('Enter your email first, then click Forgot Password.', 'error');
   }
 
+  authMessage('Sending reset link...');
+
   const { error } = await app.supabase.auth.resetPasswordForEmail(email, {
     redirectTo: window.location.origin
   });
@@ -455,7 +457,10 @@ async function loadData() {
 }
 
 function buildLeaderboard(profiles, allPreds, games, tournament) {
-  const filteredGames = games.filter(g => g.tournament === tournament);
+  const filteredGames = tournament === 'combined'
+    ? games
+    : games.filter(g => g.tournament === tournament);
+
   const gMap = new Map(filteredGames.map(g => [g.id, g]));
   const gameIds = new Set(filteredGames.map(g => g.id));
 
@@ -893,13 +898,12 @@ async function boot() {
     app.supabase = createClient(cfg.SUPABASE_URL, cfg.SUPABASE_ANON_KEY);
   }
 
-  const urlHash = window.location.hash || '';
-  const urlSearch = window.location.search || '';
-  const recoveryInUrl =
-    urlHash.includes('type=recovery') ||
-    urlSearch.includes('type=recovery');
+  const hash = window.location.hash || '';
+  const params = new URLSearchParams(window.location.search);
+  const recoveryHash = hash.includes('type=recovery');
+  const recoverySearch = params.get('type') === 'recovery';
 
-  if (recoveryInUrl) {
+  if (recoveryHash || recoverySearch) {
     isRecoveryMode = true;
     showResetScreen('Recovery link detected. Set your new password below.');
     return;
@@ -924,11 +928,11 @@ async function boot() {
 }
 
 document.addEventListener('DOMContentLoaded', async () => {
-  qs('signup-btn') && (qs('signup-btn').onclick = signUp);
-  qs('login-btn') && (qs('login-btn').onclick = signIn);
-  qs('logout-btn') && (qs('logout-btn').onclick = signOut);
-  qs('forgot-password-btn') && (qs('forgot-password-btn').onclick = sendPasswordReset);
-  qs('reset-password-btn') && (qs('reset-password-btn').onclick = saveNewPassword);
+  if (qs('signup-btn')) qs('signup-btn').addEventListener('click', signUp);
+  if (qs('login-btn')) qs('login-btn').addEventListener('click', signIn);
+  if (qs('logout-btn')) qs('logout-btn').addEventListener('click', signOut);
+  if (qs('forgot-password-btn')) qs('forgot-password-btn').addEventListener('click', sendPasswordReset);
+  if (qs('reset-password-btn')) qs('reset-password-btn').addEventListener('click', saveNewPassword);
 
   document.querySelectorAll('.tab-btn').forEach(btn => {
     btn.addEventListener('click', () => activateTab(btn.dataset.tab));
@@ -961,6 +965,11 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   qs('leaderboard-women-btn')?.addEventListener('click', () => {
     currentLeaderboardTournament = 'women';
+    renderLeaderboard();
+  });
+
+  qs('leaderboard-combined-btn')?.addEventListener('click', () => {
+    currentLeaderboardTournament = 'combined';
     renderLeaderboard();
   });
 

@@ -31,7 +31,7 @@
             <label>Email<input id="login-email" type="email" placeholder="name@example.com"></label>
             <label>Password<input id="login-password" type="password" placeholder="Your password"></label>
             <button id="login-btn" class="primary">Log in</button>
-            <button id="forgot-password-btn" class="ghost" style="margin-top:10px;">Forgot Password?</button>
+            <button id="forgot-password-btn" class="ghost" type="button" style="margin-top:10px;">Forgot Password?</button>
           </div>
         </div>
         <p class="footer-note">Polls open at 12:00 AM IST on the game day and lock at 6:00 PM IST.</p>
@@ -48,7 +48,7 @@
         <div class="card" style="padding:16px;background:#0f1729;margin-top:18px;">
           <label>New password<input id="reset-password" type="password" placeholder="Minimum 6 characters"></label>
           <label>Confirm password<input id="reset-password-confirm" type="password" placeholder="Re-enter password"></label>
-          <button id="reset-password-btn" class="primary">Save new password</button>
+          <button id="reset-password-btn" class="primary" type="button">Save new password</button>
         </div>
       </div>
     </section>
@@ -62,7 +62,15 @@
         <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
           <span id="user-pill" class="status open">User</span>
           <span id="admin-pill" class="status completed hidden">Admin</span>
-          <button id="logout-btn" class="ghost">Log out</button>
+		  
+		  <a href="https://lichess.org/broadcast/fide-candidates-2026/oe4JqS3R"
+			 target="_blank"
+			 class="primary"
+			 style="text-decoration:none;">
+			 Watch Games ♟
+		  </a>
+		  
+          <button id="logout-btn" class="ghost" type="button">Log out</button>
         </div>
       </div>
 
@@ -74,13 +82,13 @@
       </div>
 
       <div class="tabs">
-        <button class="tab-btn active" data-tab="polls">Polls</button>
-        <button class="tab-btn" data-tab="fixtures">Fixtures</button>
-        <button class="tab-btn" data-tab="leaderboard">Leaderboard</button>
-        <button class="tab-btn" data-tab="standings">Standings</button>
-        <button class="tab-btn" data-tab="round-predictions">Round Predictions</button>
-        <button class="tab-btn" data-tab="rules">Rules</button>
-        <button class="tab-btn hidden" data-tab="admin" id="admin-tab-btn">Admin</button>
+        <button class="tab-btn active" data-tab="polls" type="button">Polls</button>
+        <button class="tab-btn" data-tab="fixtures" type="button">Fixtures</button>
+        <button class="tab-btn" data-tab="leaderboard" type="button">Leaderboard</button>
+        <button class="tab-btn" data-tab="standings" type="button">Standings</button>
+        <button class="tab-btn" data-tab="round-predictions" type="button">Round Predictions</button>
+        <button class="tab-btn" data-tab="rules" type="button">Rules</button>
+        <button class="tab-btn hidden" data-tab="admin" id="admin-tab-btn" type="button">Admin</button>
       </div>
 
       <div class="tab-panel" data-tab-panel="polls">
@@ -90,8 +98,8 @@
             <div class="small">Only games currently open for prediction</div>
           </div>
           <div style="margin:10px 0; display:flex; gap:8px; flex-wrap:wrap;">
-            <button id="polls-open-btn" class="ghost">Open</button>
-            <button id="polls-women-btn" class="ghost">Women</button>
+            <button id="polls-open-btn" class="ghost" type="button">Open</button>
+            <button id="polls-women-btn" class="ghost" type="button">Women</button>
           </div>
           <div id="polls-empty-message" class="notice hidden" style="margin-bottom:12px;"></div>
           <div id="polls-list" class="grid"></div>
@@ -105,8 +113,8 @@
             <div class="small">Full schedule with status and results</div>
           </div>
           <div style="margin:10px 0; display:flex; gap:8px; flex-wrap:wrap;">
-            <button id="fixtures-open-btn" class="ghost">Open</button>
-            <button id="fixtures-women-btn" class="ghost">Women</button>
+            <button id="fixtures-open-btn" class="ghost" type="button">Open</button>
+            <button id="fixtures-women-btn" class="ghost" type="button">Women</button>
           </div>
           <div id="fixtures-list" class="grid"></div>
         </div>
@@ -116,11 +124,12 @@
         <div class="card">
           <div class="section-title">
             <h2>Leaderboard</h2>
-            <div class="small">Separated by tournament</div>
+            <div class="small">View Open, Women, or Combined rankings</div>
           </div>
           <div style="margin:10px 0; display:flex; gap:8px; flex-wrap:wrap;">
-            <button id="leaderboard-open-btn" class="ghost">Open</button>
-            <button id="leaderboard-women-btn" class="ghost">Women</button>
+            <button id="leaderboard-open-btn" class="ghost" type="button">Open</button>
+            <button id="leaderboard-women-btn" class="ghost" type="button">Women</button>
+			<button id="leaderboard-combined-btn" class="ghost" type="button">Combined</button>
           </div>
           <div class="table-wrap">
             <table>
@@ -146,8 +155,8 @@
             <div class="small">Based on admin-updated results</div>
           </div>
           <div style="margin:10px 0; display:flex; gap:8px; flex-wrap:wrap;">
-            <button id="standings-open-btn" class="ghost">Open</button>
-            <button id="standings-women-btn" class="ghost">Women</button>
+            <button id="standings-open-btn" class="ghost" type="button">Open</button>
+            <button id="standings-women-btn" class="ghost" type="button">Women</button>
           </div>
           <div class="table-wrap">
             <table>
@@ -176,8 +185,8 @@
           </div>
 
           <div style="margin:10px 0; display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
-            <button id="round-open-btn" class="ghost">Open</button>
-            <button id="round-women-btn" class="ghost">Women</button>
+            <button id="round-open-btn" class="ghost" type="button">Open</button>
+            <button id="round-women-btn" class="ghost" type="button">Women</button>
             <label style="display:flex; align-items:center; gap:8px; margin-left:8px;">
               <span class="small">Round</span>
               <select id="round-select"></select>
