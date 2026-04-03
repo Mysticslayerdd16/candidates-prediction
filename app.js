@@ -606,7 +606,14 @@ function renderPolls() {
       <div class="fixture">
         <div class="fixture-header">
           <div>
-            <div class="players">${esc(game.white_player)} vs ${esc(game.black_player)}</div>
+            <div class="players">
+			  ${game.lichess_url
+				? `<a href="${esc(game.lichess_url)}" target="_blank" style="color:inherit;text-decoration:none;">
+					${esc(game.white_player)} vs ${esc(game.black_player)}
+				   </a>`
+				: `${esc(game.white_player)} vs ${esc(game.black_player)}`
+			   }
+	  </div>
             <div class="meta">Round ${game.round_no} • ${esc(game.game_date)} • Poll closes 5:59 PM IST</div>
             <div class="small">${esc(getCountdownText(game))}</div>
           </div>
@@ -619,6 +626,13 @@ function renderPolls() {
         </div>
         <div class="footer-note">
           ${pred ? `Your pick: <strong>${labelResult(pred.prediction)}</strong>` : '<span class="muted">No prediction submitted yet.</span>'}
+		  ${game.lichess_url ? `
+			<div style="margin-top:8px;">
+			  <a href="${esc(game.lichess_url)}" target="_blank" class="ghost">
+				Live Board 🔴
+			  </a>
+			</div>
+		  ` : ''}
         </div>
       </div>
     `);
@@ -670,13 +684,28 @@ function renderFixtures() {
       <div class="fixture">
         <div class="fixture-header">
           <div>
-            <div class="players">${esc(game.white_player)} vs ${esc(game.black_player)}</div>
+            <div class="players">${esc(game.white_player)} vs ${esc(game.black_player)}</div><div class="players">
+			  ${game.lichess_url
+			    ? `<a href="${esc(game.lichess_url)}" target="_blank" style="color:inherit;text-decoration:none;">
+					${esc(game.white_player)} vs ${esc(game.black_player)}
+				   </a>`
+				: `${esc(game.white_player)} vs ${esc(game.black_player)}`
+			  }
+			</div>
             <div class="meta">${esc(game.game_date)}</div>
           </div>
           <span class="status ${status}">${labelStatus(status)}</span>
         </div>
         <div class="footer-note">
           ${game.result ? `<div class="small">Result: <strong>${labelResult(game.result)}</strong></div>` : '<span class="muted">Result not updated yet.</span>'}
+		  
+		  ${game.lichess_url ? `
+			<div style="margin-top:8px;">
+			  <a href="${esc(game.lichess_url)}" target="_blank" class="ghost">
+				View Game ♟
+			  </a>
+			</div>
+` : ''}
         </div>
       </div>
     `);
