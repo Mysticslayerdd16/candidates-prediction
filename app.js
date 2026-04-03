@@ -464,8 +464,17 @@ function buildLeaderboard(profiles, allPreds, games, tournament) {
   const gMap = new Map(filteredGames.map(g => [g.id, g]));
   const gameIds = new Set(filteredGames.map(g => g.id));
 
-  // 👉 Identify latest round
-  const latestRound = Math.max(...filteredGames.map(g => g.round_no));
+  // Latest round with at least one result updated
+  const roundsWithResults = [...new Set(
+    filteredGames
+      .filter(g => !!g.result)
+      .map(g => g.round_no)
+  )];
+
+  const latestRound = roundsWithResults.length
+    ? Math.max(...roundsWithResults)
+    : null;
+
   const latestRoundGameIds = new Set(
     filteredGames
       .filter(g => g.round_no === latestRound)
@@ -482,7 +491,6 @@ function buildLeaderboard(profiles, allPreds, games, tournament) {
       .forEach(pred => {
         const game = gMap.get(pred.game_id);
 
-        // 👉 Track latest round participation
         if (latestRoundGameIds.has(pred.game_id)) {
           votedInLatestRound = true;
         }
@@ -503,11 +511,9 @@ function buildLeaderboard(profiles, allPreds, games, tournament) {
       votedInLatestRound
     };
   }).sort((a, b) => {
-    // 👉 Push inactive users to bottom
     if (!a.votedInLatestRound && b.votedInLatestRound) return 1;
     if (a.votedInLatestRound && !b.votedInLatestRound) return -1;
 
-    // 👉 Normal ranking
     return b.accuracy - a.accuracy || b.correct - a.correct || a.name.localeCompare(b.name);
   });
 }
