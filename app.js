@@ -19,6 +19,8 @@ let currentRoundPredictionsTournament = 'open';
 let perfectRoundShownKey = null;
 let isRecoveryMode = false;
 let currentStatsUserId = null;
+let currentAdminTournament = 'open';
+let currentAdminFilter = 'current';
 
 const qs = id => document.getElementById(id);
 const show = el => el && el.classList.remove('hidden');
@@ -573,6 +575,38 @@ function getRoundsForTournament(tournament) {
   )].sort((a, b) => a - b);
 }
 
+
+function getCurrentRoundForTournament(tournament) {
+  const games = app.games.filter(g => g.tournament === tournament);
+  if (!games.length) return null;
+
+  const now = getISTNow();
+
+  const currentRoundCandidates = [...new Set(
+    games
+      .filter(g => g.game_date >= now.date)
+      .map(g => g.round_no)
+  )].sort((a, b) => a - b);
+
+  if (currentRoundCandidates.length) return currentRoundCandidates[0];
+
+  const rounds = [...new Set(games.map(g => g.round_no))];
+  return rounds.length ? Math.max(...rounds) : null;
+}
+
+function getAdminVisibleGames(tournament, filterMode) {
+  const games = app.games
+    .filter(g => g.tournament === tournament)
+    .sort((a, b) => a.round_no - b.round_no || a.id - b.id);
+
+  if (filterMode === 'all') return games;
+
+  const currentRound = getCurrentRoundForTournament(tournament);
+  if (currentRound === null) return games;
+
+  return games.filter(g => g.round_no === currentRound);
+}
+
 function maybeShowPerfectRoundEgg(roundGames, roundCorrect, profile) {
   if (!app.user) return;
   if (profile.id !== app.user.id) return;
@@ -797,10 +831,13 @@ function populateRoundSelect() {
 
   const rounds = getRoundsForTournament(currentRoundPredictionsTournament);
   const currentValue = select.value;
+  const currentRound = getCurrentRoundForTournament(currentRoundPredictionsTournament);
 
   select.innerHTML = rounds.map(r => `<option value="${r}">Round ${r}</option>`).join('');
 
-  if (rounds.includes(Number(currentValue))) {
+  if (currentRound !== null && rounds.includes(Number(currentRound))) {
+    select.value = String(currentRound);
+  } else if (rounds.includes(Number(currentValue))) {
     select.value = currentValue;
   } else if (rounds.length) {
     select.value = String(rounds[0]);
@@ -834,13 +871,6 @@ function renderRoundPredictions() {
   }
 
   const roundCompleted = roundGames.every(g => !!g.result);
-
-  if (!roundCompleted) {
-    messageEl.textContent = 'This round is not complete yet. Predictions will be visible after all results for the round are updated.';
-    show(messageEl);
-    return;
-  }
-
   const headerCells = roundGames.map((game, idx) =>
     `<th>G${idx + 1}<br><span class="small">${esc(game.white_player)} vs ${esc(game.black_player)}</span></th>`
   ).join('');
@@ -852,6 +882,33 @@ function renderRoundPredictions() {
       <th>Round score</th>
     </tr>
   `;
+
+  if (!roundCompleted) {
+    const profile = app.allProfiles.find(p => p.id === app.user?.id) || app.profile;
+    if (!profile) return;
+
+    const cells = roundGames.map(game => {
+      const pred = app.allPredictions.find(p => p.user_id === profile.id && p.game_id === game.id);
+
+      if (!pred) {
+        return `<td><span class="muted">No pick yet</span></td>`;
+      }
+
+      return `<td><div>${esc(labelResult(pred.prediction))}</div></td>`;
+    }).join('');
+
+    bodyEl.innerHTML = `
+      <tr>
+        <td>${esc(profile.display_name)}</td>
+        ${cells}
+        <td><span class="muted">Live</span></td>
+      </tr>
+    `;
+
+    messageEl.textContent = 'This round is still live. You can currently see only your own predictions. Once all results are updated, everyone’s predictions will be visible.';
+    show(messageEl);
+    return;
+  }
 
   app.allProfiles
     .slice()
@@ -923,6 +980,7 @@ function renderUserStats() {
   const accuracyEl = qs('stats-overall-accuracy');
   const bodyEl = qs('user-stats-body');
   const natureBodyEl = qs('user-prediction-nature-body');
+  const correctNatureBodyEl = qs('user-correct-nature-body');
 
   if (!select || !totalEl || !finishedEl || !correctEl || !accuracyEl || !bodyEl || !natureBodyEl) return;
 
@@ -937,27 +995,41 @@ function renderUserStats() {
   let totalPredictions = 0;
   let totalFinished = 0;
   let totalCorrect = 0;
+  let totalWhiteWinCorrect = 0;
+  let totalDrawCorrect = 0;
+  let totalBlackWinCorrect = 0;
 
   const rows = tournaments.map(tournament => {
-    const tGames = app.games.filter(g => g.tournament === tournament);
+    const tGames = app.games.filter(g => g.tournament === tournament && g.result);
     const tGameIds = new Set(tGames.map(g => g.id));
 
     const preds = userPredictions.filter(p => tGameIds.has(p.game_id));
 
     let finished = 0;
     let correct = 0;
+    let whiteWinCorrect = 0;
+    let drawCorrect = 0;
+    let blackWinCorrect = 0;
 
     preds.forEach(pred => {
       const game = tGames.find(g => g.id === pred.game_id);
       if (game && game.result) {
         finished += 1;
-        if (game.result === pred.prediction) correct += 1;
+        if (game.result === pred.prediction) {
+          correct += 1;
+          if (pred.prediction === 'white_win') whiteWinCorrect += 1;
+          else if (pred.prediction === 'draw') drawCorrect += 1;
+          else if (pred.prediction === 'black_win') blackWinCorrect += 1;
+        }
       }
     });
 
     totalPredictions += preds.length;
     totalFinished += finished;
     totalCorrect += correct;
+    totalWhiteWinCorrect += whiteWinCorrect;
+    totalDrawCorrect += drawCorrect;
+    totalBlackWinCorrect += blackWinCorrect;
 
     const acc = finished ? (correct / finished) * 100 : 0;
 
@@ -988,7 +1060,7 @@ function renderUserStats() {
   `).join('');
 
   const natureRows = tournaments.map(tournament => {
-    const tGames = app.games.filter(g => g.tournament === tournament);
+    const tGames = app.games.filter(g => g.tournament === tournament && g.result);
     const tGameIds = new Set(tGames.map(g => g.id));
     const preds = userPredictions.filter(p => tGameIds.has(p.game_id));
 
@@ -1017,10 +1089,15 @@ function renderUserStats() {
     };
   });
 
-  const totalNature = userPredictions.length;
-  const totalWhiteWin = userPredictions.filter(p => p.prediction === 'white_win').length;
-  const totalDraw = userPredictions.filter(p => p.prediction === 'draw').length;
-  const totalBlackWin = userPredictions.filter(p => p.prediction === 'black_win').length;
+  const totalNature = totalPredictions;
+  const filteredUserPreds = userPredictions.filter(pred => {
+    const game = app.games.find(g => g.id === pred.game_id);
+    return game && game.result;
+  });
+
+  const totalWhiteWin = filteredUserPreds.filter(p => p.prediction === 'white_win').length;
+  const totalDraw = filteredUserPreds.filter(p => p.prediction === 'draw').length;
+  const totalBlackWin = filteredUserPreds.filter(p => p.prediction === 'black_win').length;
 
   const formatOverallMix = count => {
     const pct = totalNature ? ((count / totalNature) * 100).toFixed(1) : '0.0';
@@ -1042,6 +1119,50 @@ function renderUserStats() {
       <td>${r.blackWin}</td>
     </tr>
   `).join('');
+
+  if (correctNatureBodyEl) {
+    const byTournament = tournaments.map(tournament => {
+      const tGames = app.games.filter(g => g.tournament === tournament && g.result);
+      const tGameIds = new Set(tGames.map(g => g.id));
+      const preds = userPredictions.filter(p => tGameIds.has(p.game_id));
+
+      let whiteWinCorrect = 0;
+      let drawCorrect = 0;
+      let blackWinCorrect = 0;
+
+      preds.forEach(pred => {
+        const game = tGames.find(g => g.id === pred.game_id);
+        if (game && game.result === pred.prediction) {
+          if (pred.prediction === 'white_win') whiteWinCorrect += 1;
+          else if (pred.prediction === 'draw') drawCorrect += 1;
+          else if (pred.prediction === 'black_win') blackWinCorrect += 1;
+        }
+      });
+
+      return {
+        tournament: tournament === 'open' ? 'Open' : 'Women',
+        whiteWinCorrect,
+        drawCorrect,
+        blackWinCorrect
+      };
+    });
+
+    byTournament.push({
+      tournament: 'Combined',
+      whiteWinCorrect: totalWhiteWinCorrect,
+      drawCorrect: totalDrawCorrect,
+      blackWinCorrect: totalBlackWinCorrect
+    });
+
+    correctNatureBodyEl.innerHTML = byTournament.map(r => `
+      <tr>
+        <td>${esc(r.tournament)}</td>
+        <td>${r.whiteWinCorrect}</td>
+        <td>${r.drawCorrect}</td>
+        <td>${r.blackWinCorrect}</td>
+      </tr>
+    `).join('');
+  }
 }
 
 function renderAdmin() {
@@ -1050,12 +1171,67 @@ function renderAdmin() {
 
   if (!visible) return;
 
+  const adminSection = qs('admin-section');
   const tbody = qs('admin-games-body');
-  if (!tbody) return;
+  if (!adminSection || !tbody) return;
+
+  let controls = qs('admin-filters');
+  if (!controls) {
+    const card = adminSection.querySelector('.card');
+    const titleBlock = card?.querySelector('.section-title');
+
+    controls = document.createElement('div');
+    controls.id = 'admin-filters';
+    controls.style.margin = '10px 0 16px 0';
+    controls.style.display = 'flex';
+    controls.style.gap = '8px';
+    controls.style.flexWrap = 'wrap';
+    controls.innerHTML = `
+      <button id="admin-open-btn" class="ghost" type="button">Open</button>
+      <button id="admin-women-btn" class="ghost" type="button">Women</button>
+      <button id="admin-current-btn" class="ghost" type="button">Current/Upcoming round</button>
+      <button id="admin-all-btn" class="ghost" type="button">All rounds</button>
+    `;
+
+    if (titleBlock && titleBlock.parentNode) {
+      titleBlock.parentNode.insertBefore(controls, titleBlock.nextSibling);
+    }
+
+    qs('admin-open-btn')?.addEventListener('click', () => {
+      currentAdminTournament = 'open';
+      renderAdmin();
+    });
+
+    qs('admin-women-btn')?.addEventListener('click', () => {
+      currentAdminTournament = 'women';
+      renderAdmin();
+    });
+
+    qs('admin-current-btn')?.addEventListener('click', () => {
+      currentAdminFilter = 'current';
+      renderAdmin();
+    });
+
+    qs('admin-all-btn')?.addEventListener('click', () => {
+      currentAdminFilter = 'all';
+      renderAdmin();
+    });
+  }
+
+  qs('admin-open-btn')?.classList.toggle('primary', currentAdminTournament === 'open');
+  qs('admin-open-btn')?.classList.toggle('ghost', currentAdminTournament !== 'open');
+  qs('admin-women-btn')?.classList.toggle('primary', currentAdminTournament === 'women');
+  qs('admin-women-btn')?.classList.toggle('ghost', currentAdminTournament !== 'women');
+  qs('admin-current-btn')?.classList.toggle('primary', currentAdminFilter === 'current');
+  qs('admin-current-btn')?.classList.toggle('ghost', currentAdminFilter !== 'current');
+  qs('admin-all-btn')?.classList.toggle('primary', currentAdminFilter === 'all');
+  qs('admin-all-btn')?.classList.toggle('ghost', currentAdminFilter !== 'all');
+
+  const visibleGames = getAdminVisibleGames(currentAdminTournament, currentAdminFilter);
 
   tbody.innerHTML = '';
 
-  app.games.forEach(game => {
+  visibleGames.forEach(game => {
     tbody.insertAdjacentHTML('beforeend', `
       <tr>
         <td>${game.round_no}</td>
