@@ -981,6 +981,7 @@ function renderUserStats() {
   const bodyEl = qs('user-stats-body');
   const natureBodyEl = qs('user-prediction-nature-body');
   const correctNatureBodyEl = qs('user-correct-nature-body');
+  const insightEl = qs('user-stats-insight');
 
   if (!select || !totalEl || !finishedEl || !correctEl || !accuracyEl || !bodyEl || !natureBodyEl) return;
 
@@ -990,8 +991,8 @@ function renderUserStats() {
   if (!selectedUserId) return;
 
   const userPredictions = app.allPredictions.filter(p => p.user_id === selectedUserId);
-
   const tournaments = ['open', 'women'];
+
   let totalPredictions = 0;
   let totalFinished = 0;
   let totalCorrect = 0;
@@ -1001,9 +1002,8 @@ function renderUserStats() {
 
   const rows = tournaments.map(tournament => {
     const tGames = app.games.filter(g => g.tournament === tournament && g.result);
-    const tGameIds = new Set(tGames.map(g => g.id));
-
-    const preds = userPredictions.filter(p => tGameIds.has(p.game_id));
+    const gMap = new Map(tGames.map(g => [g.id, g]));
+    const preds = userPredictions.filter(p => gMap.has(p.game_id));
 
     let finished = 0;
     let correct = 0;
@@ -1012,15 +1012,15 @@ function renderUserStats() {
     let blackWinCorrect = 0;
 
     preds.forEach(pred => {
-      const game = tGames.find(g => g.id === pred.game_id);
-      if (game && game.result) {
-        finished += 1;
-        if (game.result === pred.prediction) {
-          correct += 1;
-          if (pred.prediction === 'white_win') whiteWinCorrect += 1;
-          else if (pred.prediction === 'draw') drawCorrect += 1;
-          else if (pred.prediction === 'black_win') blackWinCorrect += 1;
-        }
+      const game = gMap.get(pred.game_id);
+      if (!game) return;
+
+      finished += 1;
+      if (game.result === pred.prediction) {
+        correct += 1;
+        if (pred.prediction === 'white_win') whiteWinCorrect += 1;
+        else if (pred.prediction === 'draw') drawCorrect += 1;
+        else if (pred.prediction === 'black_win') blackWinCorrect += 1;
       }
     });
 
@@ -1061,8 +1061,8 @@ function renderUserStats() {
 
   const natureRows = tournaments.map(tournament => {
     const tGames = app.games.filter(g => g.tournament === tournament && g.result);
-    const tGameIds = new Set(tGames.map(g => g.id));
-    const preds = userPredictions.filter(p => tGameIds.has(p.game_id));
+    const gMap = new Map(tGames.map(g => [g.id, g]));
+    const preds = userPredictions.filter(p => gMap.has(p.game_id));
 
     let whiteWin = 0;
     let draw = 0;
@@ -1089,15 +1089,15 @@ function renderUserStats() {
     };
   });
 
-  const totalNature = totalPredictions;
-  const filteredUserPreds = userPredictions.filter(pred => {
+  const finishedUserPreds = userPredictions.filter(pred => {
     const game = app.games.find(g => g.id === pred.game_id);
     return game && game.result;
   });
 
-  const totalWhiteWin = filteredUserPreds.filter(p => p.prediction === 'white_win').length;
-  const totalDraw = filteredUserPreds.filter(p => p.prediction === 'draw').length;
-  const totalBlackWin = filteredUserPreds.filter(p => p.prediction === 'black_win').length;
+  const totalNature = finishedUserPreds.length;
+  const totalWhiteWin = finishedUserPreds.filter(p => p.prediction === 'white_win').length;
+  const totalDraw = finishedUserPreds.filter(p => p.prediction === 'draw').length;
+  const totalBlackWin = finishedUserPreds.filter(p => p.prediction === 'black_win').length;
 
   const formatOverallMix = count => {
     const pct = totalNature ? ((count / totalNature) * 100).toFixed(1) : '0.0';
@@ -1123,15 +1123,15 @@ function renderUserStats() {
   if (correctNatureBodyEl) {
     const byTournament = tournaments.map(tournament => {
       const tGames = app.games.filter(g => g.tournament === tournament && g.result);
-      const tGameIds = new Set(tGames.map(g => g.id));
-      const preds = userPredictions.filter(p => tGameIds.has(p.game_id));
+      const gMap = new Map(tGames.map(g => [g.id, g]));
+      const preds = userPredictions.filter(p => gMap.has(p.game_id));
 
       let whiteWinCorrect = 0;
       let drawCorrect = 0;
       let blackWinCorrect = 0;
 
       preds.forEach(pred => {
-        const game = tGames.find(g => g.id === pred.game_id);
+        const game = gMap.get(pred.game_id);
         if (game && game.result === pred.prediction) {
           if (pred.prediction === 'white_win') whiteWinCorrect += 1;
           else if (pred.prediction === 'draw') drawCorrect += 1;
@@ -1139,19 +1139,31 @@ function renderUserStats() {
         }
       });
 
+      const totalCorrectLocal = whiteWinCorrect + drawCorrect + blackWinCorrect;
+      const formatCorrectMix = count => {
+        const pct = totalCorrectLocal ? ((count / totalCorrectLocal) * 100).toFixed(1) : '0.0';
+        return `${count} (${pct}%)`;
+      };
+
       return {
         tournament: tournament === 'open' ? 'Open' : 'Women',
-        whiteWinCorrect,
-        drawCorrect,
-        blackWinCorrect
+        whiteWinCorrect: formatCorrectMix(whiteWinCorrect),
+        drawCorrect: formatCorrectMix(drawCorrect),
+        blackWinCorrect: formatCorrectMix(blackWinCorrect)
       };
     });
 
+    const totalCorrectCombined = totalWhiteWinCorrect + totalDrawCorrect + totalBlackWinCorrect;
+    const formatCombinedCorrectMix = count => {
+      const pct = totalCorrectCombined ? ((count / totalCorrectCombined) * 100).toFixed(1) : '0.0';
+      return `${count} (${pct}%)`;
+    };
+
     byTournament.push({
       tournament: 'Combined',
-      whiteWinCorrect: totalWhiteWinCorrect,
-      drawCorrect: totalDrawCorrect,
-      blackWinCorrect: totalBlackWinCorrect
+      whiteWinCorrect: formatCombinedCorrectMix(totalWhiteWinCorrect),
+      drawCorrect: formatCombinedCorrectMix(totalDrawCorrect),
+      blackWinCorrect: formatCombinedCorrectMix(totalBlackWinCorrect)
     });
 
     correctNatureBodyEl.innerHTML = byTournament.map(r => `
@@ -1162,6 +1174,56 @@ function renderUserStats() {
         <td>${r.blackWinCorrect}</td>
       </tr>
     `).join('');
+  }
+
+  if (insightEl) {
+    const attempted = finishedUserPreds.length;
+
+    if (!attempted) {
+      insightEl.textContent = 'No completed-game prediction history yet for this user.';
+    } else {
+      const pickCounts = {
+        white_win: totalWhiteWin,
+        draw: totalDraw,
+        black_win: totalBlackWin
+      };
+
+      const correctCounts = {
+        white_win: totalWhiteWinCorrect,
+        draw: totalDrawCorrect,
+        black_win: totalBlackWinCorrect
+      };
+
+      const labels = {
+        white_win: 'white wins',
+        draw: 'draws',
+        black_win: 'black wins'
+      };
+
+      const rates = Object.keys(pickCounts).map(key => {
+        const picks = pickCounts[key];
+        const correct = correctCounts[key];
+        const accuracy = picks ? (correct / picks) * 100 : null;
+        return { key, picks, correct, accuracy };
+      });
+
+      const mostPicked = rates.slice().sort((a, b) => b.picks - a.picks)[0];
+      const eligibleRates = rates.filter(r => r.picks > 0 && r.accuracy !== null);
+      const bestRate = eligibleRates.slice().sort((a, b) => b.accuracy - a.accuracy || b.correct - a.correct)[0];
+      const worstRate = eligibleRates.slice().sort((a, b) => a.accuracy - b.accuracy || a.correct - b.correct)[0];
+
+      let insight = `Across ${attempted} completed-game predictions, this user is at ${overallAcc.toFixed(2)}% overall accuracy. `;
+
+      if (mostPicked && mostPicked.picks > 0) {
+        insight += `They most often back ${labels[mostPicked.key]} (${mostPicked.picks} picks, ${((mostPicked.picks / attempted) * 100).toFixed(1)}% of all completed-game picks). `;
+      }
+
+      if (bestRate && worstRate) {
+        insight += `Their strongest called outcome is ${labels[bestRate.key]} (${bestRate.correct}/${bestRate.picks} correct, ${bestRate.accuracy.toFixed(1)}%), while ${labels[worstRate.key]} is their weakest (${worstRate.correct}/${worstRate.picks} correct, ${worstRate.accuracy.toFixed(1)}%).`;
+      }
+
+      insightEl.textContent = insight;
+    }
   }
 }
 
